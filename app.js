@@ -1339,11 +1339,10 @@
       
       renderShell(root);
       const targetHash = '#today';
-      if (window.location.hash === targetHash) {
-        requestAnimationFrame(() => loadView('today'));
-      } else {
-        window.location.hash = targetHash;
-      }
+      window.location.hash = targetHash;
+      
+      // Force load the view since hashchange might not fire if hash was already #today
+      requestAnimationFrame(() => loadView('today'));
     });
 
     root.querySelector('#link-rules').addEventListener('click', (e) => {
@@ -1614,12 +1613,15 @@
       const tab = getActiveTab();
       loadView(tab);
     });
-
-    // Hash-change router
-    window.addEventListener('hashchange', () => {
-      loadView(getActiveTab());
-    });
   };
+
+  // Hash-change router - bind once globally
+  window.addEventListener('hashchange', () => {
+    // Only route if we are out of setup phase
+    if (window.App.state.currentPhase !== 'setup') {
+      loadView(getActiveTab());
+    }
+  });
 
   // Expose log view for external calls
   window.App.renderLogView = renderLogView;
