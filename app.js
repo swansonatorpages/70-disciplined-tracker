@@ -45,7 +45,8 @@
     sleep: {
       bedtimeHit: false,
       wakeHit: false
-    }
+    },
+    celebrationFired: false
   };
 
   // 1. initState()
@@ -172,6 +173,24 @@
     record.completed = isDayComplete(record);
     saveState();
     recalculateStreak();
+
+    // Trigger celebration if newly completed
+    if (record.completed && !record.celebrationFired) {
+      triggerCelebration(record);
+    }
+  }
+
+  function triggerCelebration(record) {
+    if (window.confetti) {
+      confetti({
+        particleCount: 120,
+        spread: 80,
+        colors: ['#f97316', '#fbbf24', '#22c55e', '#ffffff'],
+        origin: { y: 0.6 }
+      });
+      record.celebrationFired = true;
+      saveState();
+    }
   }
 
   // 8. isDayComplete(dayRecord)
@@ -257,13 +276,14 @@
   }
 
   // 11. isCheatDayAvailable(weekStart)
-  function isCheatDayAvailable(weekStart) {
-    const parts = weekStart.split('-');
-    const start = new Date(parts[0], parts[1] - 1, parts[2]);
+  function isCheatDayAvailable(targetDateKey) {
+    const parts = targetDateKey.split('-');
+    const target = new Date(parts[0], parts[1] - 1, parts[2]);
     
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(start);
-      d.setDate(d.getDate() + i);
+    // Check previous 6 days (rolling 7-day window)
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(target);
+      d.setDate(d.getDate() - i);
       
       const year = d.getFullYear();
       const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -392,7 +412,7 @@
 
       <header class="header fade-in-up">
         <div class="header__brand">
-          <span class="icon-flame icon-flame--lg" style="${isComplete ? 'filter: hue-rotate(80deg) drop-shadow(0 0 12px #22c55e);' : ''}"></span>
+          <span class="icon-flame icon-flame--lg icon-flame-hero" style="${isComplete ? 'filter: hue-rotate(80deg) drop-shadow(0 0 12px #22c55e);' : ''}"></span>
           <h1 class="header__title" style="font-family: var(--font-display); letter-spacing: 0.06em; background: ${isComplete ? 'linear-gradient(135deg, #4ade80, #22c55e)' : 'linear-gradient(135deg, #fdba74, var(--color-primary))'}; -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
             PHASE ${state.currentPhase === 'phase1' ? '1' : state.currentPhase === 'phase2' ? '2' : '0'} &mdash; DAY ${phaseDayNum} / 70
           </h1>
@@ -400,7 +420,7 @@
       </header>
 
       <div class="streak-counter fade-in-up" style="margin-bottom: var(--space-8);">
-        <div class="streak-counter__number" style="${isComplete ? 'color: var(--color-success);' : ''}">${streak}</div>
+        <div class="streak-counter__number" style="--streak-display: ${streak}; ${isComplete ? 'color: var(--color-success);' : ''}"></div>
         <div class="streak-counter__label">DAY STREAK</div>
       </div>
 
@@ -414,9 +434,10 @@
         <h2 class="section__title fade-in-up">Today's Tasks</h2>
         
         <!-- Task 1: Workout -->
-        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${t.workout ? 'var(--color-success)' : 'var(--color-border)'};" data-action="toggle" data-path="tasks.workout">
+        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${t.workout ? 'var(--color-success)' : 'var(--color-border)'};" 
+             data-action="toggle" data-path="tasks.workout" role="checkbox" aria-checked="${t.workout}" aria-label="90-Minute Workout">
           <div style="display: flex; align-items: center; gap: var(--space-4);">
-            <div class="checkbox-task">
+            <div class="checkbox-task ${t.workout ? 'pop' : ''}">
               ${renderCheckbox(t.workout)}
             </div>
             <div style="flex: 1;">
@@ -487,9 +508,9 @@
         </div>
 
         <!-- Task 4: Water -->
-        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${t.water ? 'var(--color-success)' : 'var(--color-border)'};">
+        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${t.water ? 'var(--color-success)' : 'var(--color-border)'};" role="checkbox" aria-checked="${t.water}" aria-label="Water 120 oz">
           <div style="display: flex; align-items: center; gap: var(--space-4);">
-            <div class="checkbox-task" data-action="toggle" data-path="tasks.water">
+            <div class="checkbox-task ${t.water ? 'pop' : ''}" data-action="toggle" data-path="tasks.water">
               ${renderCheckbox(t.water)}
             </div>
             <div style="flex: 1;">
@@ -498,9 +519,14 @@
             </div>
             ${t.water ? '<span class="badge badge-success">✓ DONE</span>' : ''}
           </div>
-          <div style="display: flex; gap: var(--space-4); margin-top: var(--space-4); margin-left: 44px;">
+          <div style="display: flex; gap: var(--space-6); margin-top: var(--space-4); margin-left: 44px;">
             ${[1, 2, 3].map(i => `
-              <div class="water-bottle" data-index="${i}" style="font-size: 2rem; cursor: pointer; transition: transform 0.2s; filter: ${dayRecord.waterBottles && dayRecord.waterBottles >= i ? 'grayscale(0)' : 'grayscale(1) opacity(0.3)'};">💧</div>
+              <div class="water-bottle ${dayRecord.waterBottles >= i ? 'water-bottle--filled' : ''}" 
+                   data-index="${i}" 
+                   role="button" 
+                   aria-label="Bottle ${i} of 3 &mdash; ${dayRecord.waterBottles >= i ? 'filled' : 'tap to fill'}" 
+                   aria-pressed="${dayRecord.waterBottles >= i}">
+              </div>
             `).join('')}
           </div>
         </div>
@@ -574,8 +600,15 @@
         
         e.stopPropagation();
         App.toggleTask(el.dataset.path);
-        render(); // trigger re-render
-        checkCompletionAnimation();
+        
+        // Add pop animation
+        const checkbox = el.querySelector('.checkbox-task') || el.closest('.checkbox-task');
+        if (checkbox) {
+          checkbox.classList.add('pop');
+          setTimeout(() => checkbox.classList.remove('pop'), 400);
+        }
+        
+        render(); 
       });
       if (el.tagName !== 'INPUT') {
         el.addEventListener('keydown', (e) => {
@@ -643,17 +676,9 @@
       });
     }
 
+    // Confetti logic moved to triggerCelebration() in data layer
     function checkCompletionAnimation() {
-      if (App.isDayComplete(App.getTodayRecord()) && !isComplete) { // if just changed to complete
-        if (window.confetti) {
-          confetti({
-            particleCount: 100,
-            spread: 70,
-            origin: { y: 0.6 },
-            colors: ['#22c55e', '#f97316', '#fbbf24']
-          });
-        }
-      }
+      // Logic handled via App.toggleTask -> triggerCelebration
     }
 
     function render() {
@@ -1371,7 +1396,7 @@
                padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-border);
                background:var(--color-bg);position:sticky;top:0;z-index:50;
                backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);">
-          <div style="display:flex;align-items:center;gap:var(--space-2);color:var(--color-primary);">
+          <div style="display:flex;align-items:center;gap:var(--space-2);color:var(--color-primary);" class="icon-flame-hero">
             ${ICONS.flameLg.replace('width="40" height="40"','width="24" height="24"')}
             <span style="font-family:var(--font-display);font-size:var(--text-lg);
                          letter-spacing:0.06em;color:var(--color-primary);">70 DISCIPLINED</span>
@@ -1385,17 +1410,22 @@
 
         <main id="view-root" style="flex:1;overflow-y:auto;padding-bottom:var(--space-2);"></main>
 
-        <nav class="bottom-nav" role="navigation" aria-label="Main navigation"
+        <nav class="bottom-nav" role="tablist" aria-label="Main navigation"
              style="position:sticky;bottom:0;z-index:50;">
-          ${TABS.map(t => `
-            <button class="bottom-nav__item" id="tab-${t.id}"
+          ${TABS.map(t => {
+            const active = getActiveTab() === t.id;
+            return `
+            <button class="bottom-nav__item ${active ? 'bottom-nav__item--active' : ''}" id="tab-${t.id}"
                     data-hash="${t.hash}"
+                    role="tab"
+                    aria-selected="${active}"
+                    aria-controls="view-root"
                     style="min-height:56px;min-width:44px;"
                     aria-label="${t.label}">
               <span class="bottom-nav__icon">${t.icon}</span>
               ${t.label}
             </button>
-          `).join('')}
+          `;}).join('')}
         </nav>
       </div>
     `;

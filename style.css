@@ -1,9 +1,11 @@
-/* ═══════════════════════════════════════════════════════
-   70 Disciplined — Style System
-   Military discipline meets athletic fire.
-   ═══════════════════════════════════════════════════════ */
-
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+/* SECTION: PERFORMANCE & MODERN CSS */
+@property --streak-display {
+  syntax: "<integer>";
+  initial-value: 0;
+  inherits: false;
+}
 
 /* ── Design Tokens ── */
 :root {
@@ -261,8 +263,13 @@ ul, ol { list-style: none; }
 
 @keyframes checkPop {
   0% { transform: scale(1); }
-  40% { transform: scale(1.15); }
+  40% { transform: scale(1.25); }
+  70% { transform: scale(0.92); }
   100% { transform: scale(1); }
+}
+
+.checkbox-task.pop .checkbox-task__visual {
+  animation: checkPop 400ms var(--ease-spring);
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -280,6 +287,12 @@ ul, ol { list-style: none; }
   color: var(--color-primary);
   line-height: 1;
   letter-spacing: 0.04em;
+  /* Animate counter */
+  transition: --streak-display 800ms var(--ease-out);
+  counter-set: streak var(--streak-display);
+}
+.streak-counter__number::after {
+  content: counter(streak);
 }
 .streak-counter__label {
   font-size: var(--text-xs);
@@ -340,6 +353,48 @@ ul, ol { list-style: none; }
 .icon-flame--sm { width: 16px; height: 16px; }
 .icon-flame--lg { width: 32px; height: 32px; }
 .icon-flame--xl { width: 48px; height: 48px; }
+
+/* SECTION: FLAME ENHANCEMENTS */
+.icon-flame-hero {
+  animation: flicker 3s ease-in-out infinite;
+}
+
+@keyframes flicker {
+  0%, 100% { transform: scale(1) rotate(-1deg); opacity: 1; }
+  25% { transform: scale(1.03) rotate(1deg); opacity: 0.95; }
+  50% { transform: scale(0.98) rotate(-0.5deg); opacity: 1; }
+  75% { transform: scale(1.02) rotate(0.5deg); opacity: 0.97; }
+}
+
+/* SECTION: WATER BOTTLE ENHANCEMENTS */
+.water-bottle {
+  position: relative;
+  width: 40px;
+  height: 60px;
+  border: 2px solid var(--color-text-faint);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--color-surface);
+  transition: border-color var(--duration-fast);
+}
+.water-bottle::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 100%;
+  background: linear-gradient(to top, #1e88e5, #42a5f5);
+  clip-path: inset(100% 0 0 0);
+  transition: clip-path 600ms var(--ease-out);
+}
+.water-bottle--filled {
+  border-color: #42a5f5;
+}
+.water-bottle--filled::before {
+  clip-path: inset(0% 0 0 0);
+}
 
 /* ═══════════════════════════════════════════════════════
    9. BOTTOM NAV
@@ -506,11 +561,7 @@ ul, ol { list-style: none; }
 /* ═══════════════════════════════════════════════════════
    ANIMATIONS
    ═══════════════════════════════════════════════════════ */
-@keyframes flicker {
-  0% { opacity: 0.85; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.06); }
-  100% { opacity: 0.9; transform: scale(1.02); }
-}
+/* Flicker keyframes defined in FLAME ENHANCEMENTS above */
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(12px); }
   to { opacity: 1; transform: translateY(0); }
