@@ -1624,4 +1624,17 @@
   // Expose log view for external calls
   window.App.renderLogView = renderLogView;
 
+  // Boot the app robustly
+  const boot = () => {
+    if (window.App && window.App.initApp) {
+      window.App.initApp();
+    }
+  };
+  
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
 })();
