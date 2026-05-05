@@ -1292,7 +1292,7 @@
   function renderOnboarding(root) {
     root.innerHTML = `
       <div style="min-height:100dvh;display:flex;flex-direction:column;align-items:center;
-                  justify-content:center;padding:var(--space-8);text-align:center;
+                  justify-content:center;padding:calc(env(safe-area-inset-top, 0px) + var(--space-8)) var(--space-8) calc(env(safe-area-inset-bottom, 0px) + var(--space-8));text-align:center;
                   background:var(--color-bg);position:relative;overflow:hidden;">
         <div style="position:absolute;inset:0;background:radial-gradient(ellipse 60% 50% at 50% 60%,
              oklch(from #f97316 l c h / 0.1),transparent 70%);pointer-events:none;"></div>
@@ -1336,8 +1336,14 @@
       window.App.state.phase1Start  = today;
       window.App.state.currentPhase = 'phase1';
       window.App.saveState();
+      
       renderShell(root);
-      navigate('today');
+      const targetHash = '#today';
+      if (window.location.hash === targetHash) {
+        requestAnimationFrame(() => loadView('today'));
+      } else {
+        window.location.hash = targetHash;
+      }
     });
 
     root.querySelector('#link-rules').addEventListener('click', (e) => {
@@ -1363,7 +1369,8 @@
     root.innerHTML = `
       <div class="app-shell" style="display:flex;flex-direction:column;min-height:100dvh;max-width:480px;margin:0 auto;">
         <header class="top-bar" style="display:flex;align-items:center;justify-content:space-between;
-               padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--color-border);
+               padding: calc(env(safe-area-inset-top, 0px) + var(--space-3)) var(--space-4) var(--space-3);
+               border-bottom:1px solid var(--color-border);
                background:var(--color-bg);position:sticky;top:0;z-index:50;
                backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);">
           <div style="display:flex;align-items:center;gap:var(--space-2);color:var(--color-primary);" class="icon-flame-hero">
@@ -1381,7 +1388,8 @@
         <main id="view-root" style="flex:1;overflow-y:auto;padding-bottom:var(--space-2);"></main>
 
         <nav class="bottom-nav" role="tablist" aria-label="Main navigation"
-             style="position:sticky;bottom:0;z-index:50;">
+             style="position:sticky;bottom:0;z-index:50;background:var(--color-surface);border-top:1px solid var(--color-border);padding-bottom:env(safe-area-inset-bottom, 0px);">
+          <div style="display:flex;width:100%;">
           ${TABS.map(t => {
             const active = getActiveTab() === t.id;
             return `
@@ -1396,6 +1404,7 @@
               ${t.label}
             </button>
           `;}).join('')}
+          </div>
         </nav>
       </div>
     `;
