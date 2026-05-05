@@ -1,4 +1,4 @@
-const CACHE_NAME = '70hard-v10';
+const CACHE_NAME = '70hard-v11';
 // Note: If deploying to a custom domain (e.g., https://mytracker.com), 
 // root-relative paths like '/' work fine.
 // For GitHub Pages subdirectories (e.g., /70-disciplined-tracker/), 
