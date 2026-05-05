@@ -22,14 +22,9 @@
   <a href="#view-root" class="visually-hidden focus:not-sr-only" style="top: 1rem; left: 1rem; z-index: 999; background: var(--color-primary); color: white; padding: 0.5rem 1rem; border-radius: var(--radius-md);">Skip to content</a>
   <div id="app"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" async></script>
   <script src="./app.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      if (window.App && window.App.initApp) {
-        window.App.initApp();
-      }
-    });
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         const registerSW = () => {
