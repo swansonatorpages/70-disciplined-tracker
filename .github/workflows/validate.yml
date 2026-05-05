@@ -1,0 +1,44 @@
+name: Validate PWA Requirements
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check index.html for PWA meta tags
+        run: |
+          if [ ! -f "index.html" ]; then
+            echo "❌ index.html not found!"
+            exit 1
+          fi
+
+          MISSING=0
+          
+          if ! grep -q '<link rel="manifest"' index.html; then
+            echo "❌ Missing <link rel=\"manifest\">"
+            MISSING=1
+          fi
+
+          if ! grep -q '<meta name="theme-color"' index.html; then
+            echo "❌ Missing <meta name=\"theme-color\">"
+            MISSING=1
+          fi
+
+          if ! grep -q 'serviceWorker' index.html; then
+            echo "❌ Missing service worker registration script"
+            MISSING=1
+          fi
+
+          if [ $MISSING -eq 1 ]; then
+            echo "❌ Missing PWA requirements"
+            exit 1
+          else
+            echo "✅ PWA validation passed"
+          fi

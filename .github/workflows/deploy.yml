@@ -1,0 +1,26 @@
+# GitHub Actions workflow to deploy the 70 Disciplined PWA to GitHub Pages
+# This workflow publishes the repository contents to the 'gh-pages' branch
+name: Deploy PWA to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
+          publish_branch: gh-pages
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Deploy 70 Disciplined PWA — ${{ github.sha }}'
