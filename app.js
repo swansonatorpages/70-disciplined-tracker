@@ -582,9 +582,6 @@
         </section>
       ` : ''}
 
-
-      ${window.App._renderNav('today')}
-      
       <div class="toast" id="toast"></div>
     `;
 
@@ -901,8 +898,6 @@
       ` : ''}
 
       <div style="height: 60px;"></div>
-
-      ${window.App._renderNav('progress')}
     `;
 
     container.innerHTML = html;
@@ -918,28 +913,7 @@
     }
   };
 
-  // ── Shared nav renderer ──────────────────────────────
-  window.App._renderNav = function(activeTab) {
-    const tabs = [
-      { id: 'today',    icon: '⚡', label: 'Today',    fn: 'renderTodayView'    },
-      { id: 'log',      icon: '📝', label: 'Log',      fn: null                 },
-      { id: 'progress', icon: '📊', label: 'Progress', fn: 'renderProgressView' },
-      { id: 'rules',    icon: '📋', label: 'Rules',    fn: 'renderRulesView'    },
-      { id: 'settings', icon: '⚙️', label: 'Settings', fn: 'renderSettingsView' },
-    ];
-    return `
-      <nav class="bottom-nav" aria-label="Main navigation">
-        ${tabs.map(t => `
-          <button class="bottom-nav__item${activeTab === t.id ? ' bottom-nav__item--active' : ''}"
-                  ${t.fn ? `onclick="window.App.${t.fn}(document.getElementById('app'))"` : ''}>
-            <span class="bottom-nav__icon">${t.icon}</span>
-            ${t.label}
-          </button>`).join('')}
-      </nav>
-    `;
-  };
-
-  // ── 17. renderRulesView ───────────────────────────────
+  // 17. renderRulesView ───────────────────────────────
   window.App.renderRulesView = function(container) {
     const RULES = [
       {
@@ -1054,8 +1028,6 @@
             The rules exist to build the habits that compound into results.
           </p>
         </section>
-
-        ${window.App._renderNav('rules')}
       </div>
     `;
   };
@@ -1083,7 +1055,7 @@
         <header class="header fade-in-up" style="padding-top:var(--space-8);margin-bottom:var(--space-6);">
           <h1 style="font-family:var(--font-display);font-size:var(--text-xl);letter-spacing:0.06em;
                       background:linear-gradient(135deg,#fdba74,var(--color-primary));
-                      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
+                      -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;;">
             SETTINGS
           </h1>
           <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1);">
@@ -1213,8 +1185,6 @@
             </div>
           </details>
         </section>
-
-        ${window.App._renderNav('settings')}
       </div>
     `;
 
