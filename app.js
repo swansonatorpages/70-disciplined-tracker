@@ -1598,10 +1598,13 @@
     }
 
     renderShell(root);
+    console.log('[App] Shell rendered, loading initial view');
 
-    // Initial route
-    const tab = getActiveTab();
-    loadView(tab);
+    // Ensure DOM is ready before initial load
+    requestAnimationFrame(() => {
+      const tab = getActiveTab();
+      loadView(tab);
+    });
 
     // Hash-change router
     window.addEventListener('hashchange', () => {
