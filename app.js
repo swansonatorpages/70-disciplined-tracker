@@ -23,7 +23,7 @@
       bedtimeTarget: "23:00",
       wakeTarget: "06:30",
       graceWindowMin: 15,
-      proteinGoal: 180,
+      proteinGoal: 175,
       calorieCeiling: 2700,
       waterGoal: 120,
       waterBottleSize: 40
@@ -391,6 +391,11 @@
     const cheatAvailable = App.isCheatDayAvailable(todayKey);
     const t = dayRecord.tasks;
 
+    const pGoal = state.settings.proteinGoal || 175;
+    const cCeil = state.settings.calorieCeiling || 2700;
+    const pGrace = Math.round(pGoal * 0.8);
+    const cGrace = Math.round(cCeil * 1.1);
+
     // Helper: generate standard checkbox visual
     const renderCheckbox = (isChecked) => `
       <div class="checkbox-task__visual" style="${isChecked ? 'border-style: solid; background: var(--color-primary); border-color: var(--color-primary); box-shadow: var(--shadow-glow);' : ''}">
@@ -471,7 +476,7 @@
             <div style="flex: 1;">
               <div style="font-weight: 700; color: ${dietChecked ? 'var(--color-text-muted)' : 'var(--color-text)'};">Diet & Nutrition</div>
               <div style="font-size: var(--text-sm); color: var(--color-text-faint);">
-                ${t.diet.cheatDay ? 'Cheat day used today' : `Protein: ${dayRecord.proteinLogged || 0}/180g &middot; Cals: ${dayRecord.caloriesLogged || '–'}/2700`}
+                ${t.diet.cheatDay ? 'Cheat day used today' : `Protein: ${dayRecord.proteinLogged || 0}/${pGoal}g &middot; Cals: ${dayRecord.caloriesLogged || '–'}/${cCeil}`}
               </div>
             </div>
             ${t.diet.cheatDay ? '<span class="badge" style="background: var(--color-gold); color: #000;">CHEAT DAY</span>' : (dietChecked ? '<span class="badge badge-success">✓ DONE</span>' : '<span style="font-size: 1.2rem;">▼</span>')}
@@ -486,10 +491,10 @@
                 <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.tracked ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.tracked"> Cal AI tracked today
               </label>
               <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${t.diet.cheatDay ? '0.5' : '1'};">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.proteinMet ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.proteinMet"> 180g protein hit
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.proteinMet ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.proteinMet"> ${pGrace}g–${pGoal}g protein hit
               </label>
               <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${t.diet.cheatDay ? '0.5' : '1'};">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.caloriesOk ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.caloriesOk"> Under 2,700 calories
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.caloriesOk ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.caloriesOk"> Under ${cGrace.toLocaleString()} calories
               </label>
 
               <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-2); margin-top: var(--space-2);">
