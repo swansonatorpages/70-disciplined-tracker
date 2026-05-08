@@ -491,10 +491,10 @@
                 <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.tracked ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.tracked"> Cal AI tracked today
               </label>
               <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${t.diet.cheatDay ? '0.5' : '1'};">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.proteinMet ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.proteinMet"> ${pGrace}g–${pGoal}g protein hit
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.proteinMet ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.proteinMet"> ${pGoal}g protein hit (-20% grace window : ${pGrace}g)
               </label>
               <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${t.diet.cheatDay ? '0.5' : '1'};">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.caloriesOk ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.caloriesOk"> Under ${cGrace.toLocaleString()} calories
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.caloriesOk ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.caloriesOk"> Under ${cCeil.toLocaleString()} calories (+10% grace window : ${cGrace.toLocaleString()})
               </label>
 
               <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-2); margin-top: var(--space-2);">
