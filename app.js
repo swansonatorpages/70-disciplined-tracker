@@ -32,7 +32,11 @@
   };
 
   const defaultDayTasks = {
-    workout: false,
+    workout: {
+      activeMinutes: false,
+      steps: false,
+      caloriesBurned: false
+    },
     photo: false,
     diet: {
       weighed: false,
@@ -103,7 +107,18 @@
       
       saveState();
     }
-    return window.App.state.days[key];
+    const record = window.App.state.days[key];
+    // Migrate old boolean workout to new object format
+    if (record && record.tasks && typeof record.tasks.workout === 'boolean') {
+      const wasComplete = record.tasks.workout;
+      record.tasks.workout = {
+        activeMinutes: wasComplete,
+        steps: false,
+        caloriesBurned: false
+      };
+      saveState();
+    }
+    return record;
   }
 
   // 5. getDayNumber(dateString)
@@ -198,7 +213,9 @@
     if (!dayRecord || !dayRecord.tasks) return false;
     const t = dayRecord.tasks;
     
-    const workoutDone = t.workout;
+    // Helper: check workout completion (handles old boolean + new object format)
+    const workoutVal = t.workout;
+    const workoutDone = (typeof workoutVal === 'boolean') ? workoutVal : (workoutVal.activeMinutes || workoutVal.steps || workoutVal.caloriesBurned);
     const photoDone = t.photo;
     
     const dietDone = t.diet.cheatDay || 
@@ -317,7 +334,8 @@
       const record = window.App.state.days[dateKey];
       if (record && record.tasks) {
         const t = record.tasks;
-        if (!t.workout) counts.workout++;
+        const wk = t.workout;
+        if (typeof wk === 'boolean' ? !wk : !(wk.activeMinutes || wk.steps || wk.caloriesBurned)) counts.workout++;
         if (!t.photo) counts.photo++;
         if (!t.diet.cheatDay) {
           if (!t.diet.weighed) counts['diet.weighed']++;
@@ -409,6 +427,9 @@
       </div>
     `;
 
+    // Workout check
+    const workoutDone = t.workout.activeMinutes || t.workout.steps || t.workout.caloriesBurned;
+
     // Diet Expandable logic
     const dietChecked = t.diet.cheatDay || (t.diet.weighed && t.diet.tracked && t.diet.proteinMet && t.diet.caloriesOk);
 
@@ -450,17 +471,33 @@
         <h2 class="section__title fade-in-up">Today's Tasks</h2>
         
         <!-- Task 1: Workout -->
-        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${t.workout ? 'var(--color-success)' : 'var(--color-border)'};" 
-             data-action="toggle" data-path="tasks.workout" role="checkbox" aria-checked="${t.workout}" aria-label="90-Minute Workout">
-          <div style="display: flex; align-items: center; gap: var(--space-4);">
-            <div class="checkbox-task ${t.workout ? 'pop' : ''}">
-              ${renderCheckbox(t.workout)}
+        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${workoutDone ? 'var(--color-success)' : 'var(--color-border)'};">
+          <div style="display: flex; align-items: center; gap: var(--space-4); cursor: pointer;" onclick="document.getElementById('workout-details').style.display = document.getElementById('workout-details').style.display === 'none' ? 'block' : 'none'">
+            <div class="checkbox-task">
+              ${renderCheckbox(workoutDone)}
             </div>
             <div style="flex: 1;">
-              <div style="font-weight: 700; color: ${t.workout ? 'var(--color-text-muted)' : 'var(--color-text)'};">90-Minute Workout</div>
-              <div style="font-size: var(--text-sm); color: var(--color-text-faint);">Lifting, Peloton, or combo &mdash; must total 90 min</div>
+              <div style="font-weight: 700; color: ${workoutDone ? 'var(--color-text-muted)' : 'var(--color-text)'};">90-Minute Workout</div>
+              <div style="font-size: var(--text-sm); color: var(--color-text-faint);">Active Minutes, Steps, or Calories Burned</div>
             </div>
-            ${t.workout ? '<span class="badge badge-success">✓ DONE</span>' : ''}
+            ${workoutDone ? '<span class="badge badge-success">✓ DONE</span>' : '<span style="font-size: 1.2rem;">▼</span>'}
+          </div>
+          
+          <div id="workout-details" style="display: none; margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border);">
+            <div style="font-size: var(--text-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: var(--space-3);">
+              CHECK ANY ONE TO COMPLETE
+            </div>
+            <div style="display: flex; flex-direction: column; gap: var(--space-3);">
+              <label style="display: flex; align-items: center; gap: var(--space-3);">
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.workout.activeMinutes ? 'checked' : ''} data-action="toggle" data-path="tasks.workout.activeMinutes"> 90 Active Minutes
+              </label>
+              <label style="display: flex; align-items: center; gap: var(--space-3);">
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.workout.steps ? 'checked' : ''} data-action="toggle" data-path="tasks.workout.steps"> 10,000 Steps
+              </label>
+              <label style="display: flex; align-items: center; gap: var(--space-3);">
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.workout.caloriesBurned ? 'checked' : ''} data-action="toggle" data-path="tasks.workout.caloriesBurned"> 1,000 Calories Burned
+              </label>
+            </div>
           </div>
         </div>
 
@@ -704,7 +741,29 @@
     }
 
     function render() {
+      // Preserve which expandable panels are open
+      const workoutOpen = container.querySelector('#workout-details');
+      const dietOpen = container.querySelector('#diet-details');
+      const sleepOpen = container.querySelector('#sleep-details');
+      const wasWorkoutOpen = workoutOpen && workoutOpen.style.display !== 'none';
+      const wasDietOpen = dietOpen && dietOpen.style.display !== 'none';
+      const wasSleepOpen = sleepOpen && sleepOpen.style.display !== 'none';
+      
       App.renderTodayView(container);
+      
+      // Restore panel states
+      if (wasWorkoutOpen) {
+        const wd = container.querySelector('#workout-details');
+        if (wd) wd.style.display = 'block';
+      }
+      if (wasDietOpen) {
+        const dd = container.querySelector('#diet-details');
+        if (dd) dd.style.display = 'block';
+      }
+      if (wasSleepOpen) {
+        const sd = container.querySelector('#sleep-details');
+        if (sd) sd.style.display = 'block';
+      }
     }
   };
 
@@ -943,7 +1002,7 @@
     const RULES = [
       {
         n: 1, icon: '🏋️', title: '90-MINUTE WORKOUT',
-        body: 'One continuous or combined session per day. Peloton, lifting, or any combo. Must total 90 minutes.'
+        body: 'Complete any ONE of: 90 Active Minutes, 10,000 Steps, or 1,000 Calories Burned. Lifting, Peloton, walking, or any combo.'
       },
       {
         n: 2, icon: '📸', title: 'PROGRESS PHOTO',
@@ -1593,8 +1652,9 @@
       const t = tasks;
       const dietDone = t.diet.cheatDay || (t.diet.weighed && t.diet.tracked && t.diet.proteinMet && t.diet.caloriesOk);
       const sleepDone = t.sleep.bedtimeHit && t.sleep.wakeHit;
+      const wkDone = typeof t.workout === 'boolean' ? t.workout : (t.workout.activeMinutes || t.workout.steps || t.workout.caloriesBurned);
       const checks = [
-        { label:'💪 Workout',       done: t.workout },
+        { label:'💪 Workout',       done: wkDone },
         { label:'📸 Photo',         done: t.photo },
         { label:'🥩 Diet',          done: dietDone, note: t.diet.cheatDay ? 'Cheat day' : '' },
         { label:'💧 Water',         done: t.water },
