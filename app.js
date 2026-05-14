@@ -19,6 +19,7 @@
     },
     phase1MissedDays: [],
     phase1FrictionLog: [],
+    mulligansUsed: 0,
     settings: {
       bedtimeTarget: "23:00",
       wakeTarget: "06:30",
@@ -391,11 +392,8 @@
     const t = dayRecord.tasks;
 
     const isActualToday = todayKey === App.getTodayKey();
-    const canGoNext = !isActualToday;
-    const canGoPrev = state.programStart ? todayKey > state.programStart : false;
-    
-    const dateObj = new Date(todayKey + 'T00:00:00');
-    const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    const editingDateObj = new Date(todayKey + 'T00:00:00');
+    const editingDateStr = editingDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
     const pGoal = state.settings.proteinGoal || 175;
     const cCeil = state.settings.calorieCeiling || 2700;
@@ -415,20 +413,18 @@
     const dietChecked = t.diet.cheatDay || (t.diet.weighed && t.diet.tracked && t.diet.proteinMet && t.diet.caloriesOk);
 
     let html = `
+      ${!isActualToday ? `
+        <div style="background: oklch(from var(--color-gold) l c h / 0.15); border: 1px solid var(--color-gold); color: var(--color-gold); padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); margin-bottom: var(--space-4); display: flex; align-items: center; justify-content: space-between;" class="fade-in-up">
+          <div style="font-weight: 700; font-size: var(--text-sm);">📝 Editing: ${editingDateStr} (Day ${dayNum})</div>
+          <button id="btn-back-to-today" class="btn-ghost" style="padding: var(--space-1) var(--space-3); font-size: var(--text-xs); border-color: var(--color-gold); color: var(--color-gold);">← Back to Today</button>
+        </div>
+      ` : ''}
+
       ${isComplete ? `
         <div style="background: var(--color-success); color: #fff; text-align: center; padding: var(--space-2); font-weight: 800; letter-spacing: 0.1em; border-radius: var(--radius-md); margin-bottom: var(--space-4);" class="fade-in-up">
           🔥 DAY COMPLETE
         </div>
       ` : ''}
-
-      <!-- Date Navigation -->
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); background: var(--color-surface); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--color-border);" class="fade-in-up">
-        <button id="btn-prev-day" class="btn-ghost" style="padding: var(--space-1) var(--space-2); font-size: var(--text-sm); ${!canGoPrev ? 'opacity:0.3;cursor:not-allowed;' : ''}" ${!canGoPrev ? 'disabled' : ''}>← Prev</button>
-        <div style="font-family: var(--font-display); font-size: var(--text-sm); letter-spacing: 0.05em; color: var(--color-text);">
-          ${formattedDate} ${isActualToday ? '(TODAY)' : ''}
-        </div>
-        <button id="btn-next-day" class="btn-ghost" style="padding: var(--space-1) var(--space-2); font-size: var(--text-sm); ${!canGoNext ? 'opacity:0.3;cursor:not-allowed;' : ''}" ${!canGoNext ? 'disabled' : ''}>Next →</button>
-      </div>
 
       <header class="header fade-in-up">
         <div class="header__brand">
@@ -609,30 +605,11 @@
 
     // --- Events ---
 
-    // Date navigation
-    const btnPrev = container.querySelector('#btn-prev-day');
-    const btnNext = container.querySelector('#btn-next-day');
-    
-    if (btnPrev) {
-      btnPrev.addEventListener('click', () => {
-        const d = new Date(todayKey + 'T00:00:00');
-        d.setDate(d.getDate() - 1);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        window.App.activeDateKey = `${year}-${month}-${day}`;
-        App.renderTodayView(container);
-      });
-    }
-    
-    if (btnNext) {
-      btnNext.addEventListener('click', () => {
-        const d = new Date(todayKey + 'T00:00:00');
-        d.setDate(d.getDate() + 1);
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        window.App.activeDateKey = `${year}-${month}-${day}`;
+    // Back to today button (mulligan editing mode)
+    const btnBack = container.querySelector('#btn-back-to-today');
+    if (btnBack) {
+      btnBack.addEventListener('click', () => {
+        window.App.activeDateKey = null;
         App.renderTodayView(container);
       });
     }
@@ -1198,6 +1175,42 @@
           </div>
         </section>
 
+        <!-- FORGOT TO MARK -->
+        <section class="section fade-in-up">
+          <h2 class="section__title">Forgot to Mark?</h2>
+          <div class="card" style="display:flex;flex-direction:column;gap:var(--space-4);">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <div style="font-weight:700;font-size:var(--text-sm);color:var(--color-text);">Mulligans</div>
+                <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:2px;">Go back and edit a previous day</div>
+              </div>
+              <div style="font-family:var(--font-display);font-size:var(--text-lg);color:${(10 - (window.App.state.mulligansUsed || 0)) > 0 ? 'var(--color-primary)' : 'var(--color-danger)'};">
+                ${10 - (window.App.state.mulligansUsed || 0)} / 10
+              </div>
+            </div>
+            <div style="background:var(--color-surface-offset);height:6px;border-radius:99px;overflow:hidden;">
+              <div style="height:100%;width:${((10 - (window.App.state.mulligansUsed || 0)) / 10) * 100}%;background:var(--color-primary);border-radius:99px;transition:width 0.3s;"></div>
+            </div>
+            ${(10 - (window.App.state.mulligansUsed || 0)) > 0 ? `
+              <div>
+                <label style="${labelStyle}" for="mulligan-date">Select a date to edit</label>
+                <input id="mulligan-date" type="date"
+                  min="${window.App.state.programStart || ''}"
+                  max="${window.App.getTodayKey()}"
+                  style="${fieldStyle}"
+                  placeholder="Pick a date">
+              </div>
+              <button id="btn-use-mulligan" class="btn-primary" style="width:100%;">
+                📝 Use Mulligan & Edit Day
+              </button>
+            ` : `
+              <div style="text-align:center;padding:var(--space-3);color:var(--color-text-muted);font-size:var(--text-sm);font-weight:600;">
+                🚫 All mulligans used — no more edits allowed.
+              </div>
+            `}
+          </div>
+        </section>
+
         <!-- DANGER ZONE -->
         <section class="section fade-in-up">
           <h2 class="section__title" style="color:var(--color-danger);">Danger Zone</h2>
@@ -1265,6 +1278,35 @@
         }
       });
     });
+
+    // Mulligan - Forgot to Mark
+    const btnMulligan = container.querySelector('#btn-use-mulligan');
+    if (btnMulligan) {
+      btnMulligan.addEventListener('click', () => {
+        const dateInput = container.querySelector('#mulligan-date');
+        const selectedDate = dateInput ? dateInput.value : '';
+        if (!selectedDate) {
+          alert('Please select a date to edit.');
+          return;
+        }
+        const today = window.App.getTodayKey();
+        if (selectedDate > today) {
+          alert('You cannot edit a future date.');
+          return;
+        }
+        if (window.App.state.programStart && selectedDate < window.App.state.programStart) {
+          alert('That date is before your program started.');
+          return;
+        }
+        // Use a mulligan
+        window.App.state.mulligansUsed = (window.App.state.mulligansUsed || 0) + 1;
+        window.App.saveState();
+        // Switch to the Today view with that date active
+        window.App.activeDateKey = selectedDate;
+        window.App._skipDateReset = true;
+        window.location.hash = '#today';
+      });
+    }
 
     // Export
     container.querySelector('#btn-export').addEventListener('click', () => {
@@ -1503,9 +1545,10 @@
     if (!viewRoot) return;
     if (_transitioning) return;
 
-    if (tabId === 'today') {
+    if (tabId === 'today' && !window.App._skipDateReset) {
       window.App.activeDateKey = null;
     }
+    window.App._skipDateReset = false;
 
     updateTabHighlight(tabId);
     updateTopBar();
