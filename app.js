@@ -84,8 +84,7 @@
   }
 
   // 4. getTodayRecord()
-  function getTodayRecord() {
-    const key = getTodayKey();
+  function getTodayRecord(key = getTodayKey()) {
     if (!window.App.state.days[key]) {
       const dayNum = getDayNumber(key);
       const isSetup = window.App.state.currentPhase === 'setup';
@@ -143,9 +142,9 @@
     return diffDays + 1;
   }
 
-  // 7. toggleTask(taskPath, value)
-  function toggleTask(taskPath, value) {
-    const record = getTodayRecord();
+  // 7. toggleTask(taskPath, value, dateKey)
+  function toggleTask(taskPath, value, dateKey = window.App.activeDateKey || getTodayKey()) {
+    const record = getTodayRecord(dateKey);
     if (!record) return;
 
     const parts = taskPath.split('.');
@@ -381,8 +380,8 @@
   window.App.renderTodayView = function(container) {
     const App = window.App;
     const state = App.state;
-    const todayKey = App.getTodayKey();
-    const dayRecord = App.getTodayRecord();
+    const todayKey = window.App.activeDateKey || App.getTodayKey();
+    const dayRecord = App.getTodayRecord(todayKey);
     const dayNum = App.getDayNumber(todayKey);
     const phaseDayNum = App.getCurrentPhaseDay(todayKey);
     const isComplete = App.isDayComplete(dayRecord);
@@ -390,6 +389,13 @@
     const isPhase1 = state.currentPhase === 'phase1';
     const cheatAvailable = App.isCheatDayAvailable(todayKey);
     const t = dayRecord.tasks;
+
+    const isActualToday = todayKey === App.getTodayKey();
+    const canGoNext = !isActualToday;
+    const canGoPrev = state.programStart ? todayKey > state.programStart : false;
+    
+    const dateObj = new Date(todayKey + 'T00:00:00');
+    const formattedDate = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
     const pGoal = state.settings.proteinGoal || 175;
     const cCeil = state.settings.calorieCeiling || 2700;
@@ -414,6 +420,15 @@
           🔥 DAY COMPLETE
         </div>
       ` : ''}
+
+      <!-- Date Navigation -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-4); background: var(--color-surface); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); border: 1px solid var(--color-border);" class="fade-in-up">
+        <button id="btn-prev-day" class="btn-ghost" style="padding: var(--space-1) var(--space-2); font-size: var(--text-sm); ${!canGoPrev ? 'opacity:0.3;cursor:not-allowed;' : ''}" ${!canGoPrev ? 'disabled' : ''}>← Prev</button>
+        <div style="font-family: var(--font-display); font-size: var(--text-sm); letter-spacing: 0.05em; color: var(--color-text);">
+          ${formattedDate} ${isActualToday ? '(TODAY)' : ''}
+        </div>
+        <button id="btn-next-day" class="btn-ghost" style="padding: var(--space-1) var(--space-2); font-size: var(--text-sm); ${!canGoNext ? 'opacity:0.3;cursor:not-allowed;' : ''}" ${!canGoNext ? 'disabled' : ''}>Next →</button>
+      </div>
 
       <header class="header fade-in-up">
         <div class="header__brand">
@@ -498,9 +513,9 @@
               </label>
 
               <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-2); margin-top: var(--space-2);">
-                <input type="number" id="input-weight" placeholder="Weight" value="${dayRecord.weight || ''}" style="width: 100%; padding: var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); color: #fff; border-radius: var(--radius-md);">
-                <input type="number" id="input-cals" placeholder="Cals" value="${dayRecord.caloriesLogged || ''}" style="width: 100%; padding: var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); color: #fff; border-radius: var(--radius-md);">
-                <input type="number" id="input-protein" placeholder="Protein" value="${dayRecord.proteinLogged || ''}" style="width: 100%; padding: var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); color: #fff; border-radius: var(--radius-md);">
+                <input type="number" id="input-weight" placeholder="Weight" value="${dayRecord.weight || ''}" style="width: 100%; padding: var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); color: #fff; border-radius: var(--radius-md); font-size: 16px;">
+                <input type="number" id="input-cals" placeholder="Cals" value="${dayRecord.caloriesLogged || ''}" style="width: 100%; padding: var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); color: #fff; border-radius: var(--radius-md); font-size: 16px;">
+                <input type="number" id="input-protein" placeholder="Protein" value="${dayRecord.proteinLogged || ''}" style="width: 100%; padding: var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); color: #fff; border-radius: var(--radius-md); font-size: 16px;">
               </div>
 
               ${cheatAvailable || t.diet.cheatDay ? `
@@ -593,6 +608,34 @@
     container.innerHTML = html;
 
     // --- Events ---
+
+    // Date navigation
+    const btnPrev = container.querySelector('#btn-prev-day');
+    const btnNext = container.querySelector('#btn-next-day');
+    
+    if (btnPrev) {
+      btnPrev.addEventListener('click', () => {
+        const d = new Date(todayKey + 'T00:00:00');
+        d.setDate(d.getDate() - 1);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        window.App.activeDateKey = `${year}-${month}-${day}`;
+        App.renderTodayView(container);
+      });
+    }
+    
+    if (btnNext) {
+      btnNext.addEventListener('click', () => {
+        const d = new Date(todayKey + 'T00:00:00');
+        d.setDate(d.getDate() + 1);
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        window.App.activeDateKey = `${year}-${month}-${day}`;
+        App.renderTodayView(container);
+      });
+    }
 
     // Toggle tasks
     container.querySelectorAll('[data-action="toggle"]').forEach(el => {
@@ -1044,7 +1087,7 @@
 
     const fieldStyle = `width:100%;padding:var(--space-3);background:var(--color-surface);
       border:1px solid var(--color-border);border-radius:var(--radius-md);
-      color:var(--color-text);font-family:var(--font-body);font-size:var(--text-sm);`;
+      color:var(--color-text);font-family:var(--font-body);font-size:16px;`;
 
     const labelStyle = `display:block;font-size:var(--text-xs);font-weight:700;
       color:var(--color-text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:var(--space-2);`;
@@ -1459,6 +1502,10 @@
     const viewRoot = document.getElementById('view-root');
     if (!viewRoot) return;
     if (_transitioning) return;
+
+    if (tabId === 'today') {
+      window.App.activeDateKey = null;
+    }
 
     updateTabHighlight(tabId);
     updateTopBar();
