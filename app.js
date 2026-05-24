@@ -51,6 +51,13 @@
       bedtimeHit: false,
       wakeHit: false
     },
+    freePasses: {
+      workout: false,
+      photo: false,
+      water: false,
+      bible: false,
+      sleep: false
+    },
     celebrationFired: false
   };
 
@@ -118,6 +125,16 @@
       };
       saveState();
     }
+    if (record && record.tasks && record.tasks.freePasses === undefined) {
+      record.tasks.freePasses = {
+        workout: false,
+        photo: false,
+        water: false,
+        bible: false,
+        sleep: false
+      };
+      saveState();
+    }
     return record;
   }
 
@@ -163,7 +180,15 @@
     const record = getTodayRecord(dateKey);
     if (!record) return;
 
+    // Guard: ignore toggles on standard tasks if their Free Pass is active today
     const parts = taskPath.split('.');
+    const isStandardTask = parts[0] === 'tasks' && parts[1] !== 'freePasses' && parts[1] !== 'diet';
+    if (isStandardTask) {
+      const taskKey = parts[1]; // e.g. 'workout', 'photo', 'water', 'bible', 'sleep'
+      if (record.tasks && record.tasks.freePasses && record.tasks.freePasses[taskKey]) {
+        return;
+      }
+    }
     let current = record;
     for (let i = 0; i < parts.length - 1; i++) {
       if (current[parts[i]] === undefined) {
@@ -212,18 +237,19 @@
   function isDayComplete(dayRecord) {
     if (!dayRecord || !dayRecord.tasks) return false;
     const t = dayRecord.tasks;
+    const fp = t.freePasses || {};
     
     // Helper: check workout completion (handles old boolean + new object format)
     const workoutVal = t.workout;
-    const workoutDone = (typeof workoutVal === 'boolean') ? workoutVal : (workoutVal.activeMinutes || workoutVal.steps || workoutVal.caloriesBurned);
-    const photoDone = t.photo;
+    const workoutDone = fp.workout || (typeof workoutVal === 'boolean' ? workoutVal : (workoutVal.activeMinutes || workoutVal.steps || workoutVal.caloriesBurned));
+    const photoDone = fp.photo || t.photo;
     
     const dietDone = t.diet.cheatDay || 
                      (t.diet.weighed && t.diet.tracked && t.diet.proteinMet && t.diet.caloriesOk);
                      
-    const waterDone = t.water;
-    const bibleDone = t.bible;
-    const sleepDone = t.sleep.bedtimeHit && t.sleep.wakeHit;
+    const waterDone = fp.water || t.water;
+    const bibleDone = fp.bible || t.bible;
+    const sleepDone = fp.sleep || (t.sleep.bedtimeHit && t.sleep.wakeHit);
 
     return !!(workoutDone && photoDone && dietDone && waterDone && bibleDone && sleepDone);
   }
@@ -376,6 +402,19 @@
     return false;
   }
 
+  // Get number of Free Passes used for a specific task in Phase 2
+  function getTaskFreePassesUsedCount(taskKey) {
+    let count = 0;
+    if (!window.App || !window.App.state || !window.App.state.days) return 0;
+    Object.keys(window.App.state.days).forEach(key => {
+      const record = window.App.state.days[key];
+      if (record && record.phase === 'phase2' && record.tasks && record.tasks.freePasses && record.tasks.freePasses[taskKey]) {
+        count++;
+      }
+    });
+    return count;
+  }
+
   // Expose to global window
   window.App = {
     state: null,
@@ -392,7 +431,8 @@
     isCheatDayAvailable,
     getPhase1FrictionSummary,
     exportData,
-    importData
+    importData,
+    getTaskFreePassesUsedCount
   };
 
   // 15. renderTodayView(container)
@@ -427,11 +467,46 @@
       </div>
     `;
 
-    // Workout check
-    const workoutDone = t.workout.activeMinutes || t.workout.steps || t.workout.caloriesBurned;
+    // Free Passes setup
+    const fp = t.freePasses || {};
+
+    // Task completions accounting for Free Passes
+    const workoutDone = fp.workout || t.workout.activeMinutes || t.workout.steps || t.workout.caloriesBurned;
+    const photoDone = fp.photo || t.photo;
+    const waterDone = fp.water || t.water;
+    const bibleDone = fp.bible || t.bible;
+    const sleepDone = fp.sleep || (t.sleep.bedtimeHit && t.sleep.wakeHit);
 
     // Diet Expandable logic
     const dietChecked = t.diet.cheatDay || (t.diet.weighed && t.diet.tracked && t.diet.proteinMet && t.diet.caloriesOk);
+
+    // Helper: generate standard Free Pass footer row inside task cards
+    const renderFreePassRow = (taskKey) => {
+      // Only render Free Passes in Phase 2
+      if (state.currentPhase !== 'phase2' && dayRecord.phase !== 'phase2') return '';
+
+      const isPassActive = fp[taskKey];
+      const usedCount = App.getTaskFreePassesUsedCount(taskKey);
+
+      return `
+        <div class="free-pass-row" style="margin-top: var(--space-3); padding-top: var(--space-3); border-top: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; font-size: var(--text-xs); transition: all var(--duration-fast);">
+          <div style="display: flex; align-items: center; gap: var(--space-2); color: ${isPassActive ? 'var(--color-gold)' : 'var(--color-text-muted)'}; font-weight: 600;">
+            🎟️ ${isPassActive ? '<span style="color: var(--color-gold); font-weight: 800; text-shadow: 0 0 8px oklch(from var(--color-gold) l c h / 0.3);">FREE PASS ACTIVE</span>' : `Free Passes: ${usedCount}/2 Used`}
+          </div>
+          ${isPassActive ? `
+            <button class="btn-ghost" style="min-height: 24px; padding: 2px var(--space-3); font-size: 10px; border-color: var(--color-gold); color: var(--color-gold); font-weight: 700; border-radius: var(--radius-sm);" data-action="toggle" data-path="tasks.freePasses.${taskKey}">
+              Revoke Pass
+            </button>
+          ` : (usedCount < 2 ? `
+            <button class="btn-ghost" style="min-height: 24px; padding: 2px var(--space-3); font-size: 10px; border-color: var(--color-gold); color: var(--color-gold); font-weight: 700; border-radius: var(--radius-sm);" data-action="toggle" data-path="tasks.freePasses.${taskKey}">
+              Use Free Pass
+            </button>
+          ` : `
+            <span style="color: var(--color-text-faint); font-weight: 700; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em;">2/2 Used</span>
+          `)}
+        </div>
+      `;
+    };
 
     let html = `
       ${!isActualToday ? `
@@ -471,7 +546,7 @@
         <h2 class="section__title fade-in-up">Today's Tasks</h2>
         
         <!-- Task 1: Workout -->
-        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${workoutDone ? 'var(--color-success)' : 'var(--color-border)'};">
+        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${fp.workout ? 'var(--color-gold)' : (workoutDone ? 'var(--color-success)' : 'var(--color-border)')};">
           <div style="display: flex; align-items: center; gap: var(--space-4); cursor: pointer;" onclick="document.getElementById('workout-details').style.display = document.getElementById('workout-details').style.display === 'none' ? 'block' : 'none'">
             <div class="checkbox-task">
               ${renderCheckbox(workoutDone)}
@@ -480,7 +555,7 @@
               <div style="font-weight: 700; color: ${workoutDone ? 'var(--color-text-muted)' : 'var(--color-text)'};">90-Minute Workout</div>
               <div style="font-size: var(--text-sm); color: var(--color-text-faint);">Active Minutes, Steps, or Calories Burned</div>
             </div>
-            ${workoutDone ? '<span class="badge badge-success">✓ DONE</span>' : '<span style="font-size: 1.2rem;">▼</span>'}
+            ${fp.workout ? '<span class="badge" style="background: var(--color-gold); color: #000;">🎟️ FREE PASS</span>' : (workoutDone ? '<span class="badge badge-success">✓ DONE</span>' : '<span style="font-size: 1.2rem;">▼</span>')}
           </div>
           
           <div id="workout-details" style="display: none; margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border);">
@@ -488,31 +563,33 @@
               CHECK ANY ONE TO COMPLETE
             </div>
             <div style="display: flex; flex-direction: column; gap: var(--space-3);">
-              <label style="display: flex; align-items: center; gap: var(--space-3);">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.workout.activeMinutes ? 'checked' : ''} data-action="toggle" data-path="tasks.workout.activeMinutes"> 90 Active Minutes
+              <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${fp.workout ? '0.5' : '1'};">
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.workout.activeMinutes ? 'checked' : ''} ${fp.workout ? 'disabled' : ''} data-action="toggle" data-path="tasks.workout.activeMinutes"> 90 Active Minutes
               </label>
-              <label style="display: flex; align-items: center; gap: var(--space-3);">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.workout.steps ? 'checked' : ''} data-action="toggle" data-path="tasks.workout.steps"> 10,000 Steps
+              <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${fp.workout ? '0.5' : '1'};">
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.workout.steps ? 'checked' : ''} ${fp.workout ? 'disabled' : ''} data-action="toggle" data-path="tasks.workout.steps"> 10,000 Steps
               </label>
-              <label style="display: flex; align-items: center; gap: var(--space-3);">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.workout.caloriesBurned ? 'checked' : ''} data-action="toggle" data-path="tasks.workout.caloriesBurned"> 1,000 Calories Burned
+              <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${fp.workout ? '0.5' : '1'};">
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.workout.caloriesBurned ? 'checked' : ''} ${fp.workout ? 'disabled' : ''} data-action="toggle" data-path="tasks.workout.caloriesBurned"> 1,000 Calories Burned
               </label>
             </div>
           </div>
+          ${renderFreePassRow('workout')}
         </div>
-
+ 
         <!-- Task 2: Photo -->
-        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${t.photo ? 'var(--color-success)' : 'var(--color-border)'};" data-action="toggle" data-path="tasks.photo">
-          <div style="display: flex; align-items: center; gap: var(--space-4);">
+        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${fp.photo ? 'var(--color-gold)' : (photoDone ? 'var(--color-success)' : 'var(--color-border)')};" data-action="toggle" data-path="tasks.photo">
+          <div style="display: flex; align-items: center; gap: var(--space-4); opacity: ${fp.photo ? '0.6' : '1'}; cursor: ${fp.photo ? 'default' : 'pointer'};">
             <div class="checkbox-task">
-              ${renderCheckbox(t.photo)}
+              ${renderCheckbox(photoDone)}
             </div>
             <div style="flex: 1;">
-              <div style="font-weight: 700; color: ${t.photo ? 'var(--color-text-muted)' : 'var(--color-text)'};">Progress Photo</div>
+              <div style="font-weight: 700; color: ${photoDone ? 'var(--color-text-muted)' : 'var(--color-text)'};">Progress Photo</div>
               <div style="font-size: var(--text-sm); color: var(--color-text-faint);">Daily photo &mdash; front, side, or back</div>
             </div>
-            ${t.photo ? '<span class="badge badge-success">✓ DONE</span>' : ''}
+            ${fp.photo ? '<span class="badge" style="background: var(--color-gold); color: #000;">🎟️ FREE PASS</span>' : (photoDone ? '<span class="badge badge-success">✓ DONE</span>' : '')}
           </div>
+          ${renderFreePassRow('photo')}
         </div>
 
         <!-- Task 3: Diet -->
@@ -561,18 +638,18 @@
         </div>
 
         <!-- Task 4: Water -->
-        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${t.water ? 'var(--color-success)' : 'var(--color-border)'};" role="checkbox" aria-checked="${t.water}" aria-label="Water 120 oz">
-          <div style="display: flex; align-items: center; gap: var(--space-4);">
-            <div class="checkbox-task ${t.water ? 'pop' : ''}" data-action="toggle" data-path="tasks.water">
-              ${renderCheckbox(t.water)}
+        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${fp.water ? 'var(--color-gold)' : (waterDone ? 'var(--color-success)' : 'var(--color-border)')};" role="checkbox" aria-checked="${waterDone}" aria-label="Water 120 oz">
+          <div style="display: flex; align-items: center; gap: var(--space-4); opacity: ${fp.water ? '0.6' : '1'}; cursor: ${fp.water ? 'default' : 'pointer'};">
+            <div class="checkbox-task ${waterDone ? 'pop' : ''}" ${fp.water ? '' : 'data-action="toggle" data-path="tasks.water"'}>
+              ${renderCheckbox(waterDone)}
             </div>
             <div style="flex: 1;">
-              <div style="font-weight: 700; color: ${t.water ? 'var(--color-text-muted)' : 'var(--color-text)'};">Water &mdash; 120 oz</div>
+              <div style="font-weight: 700; color: ${waterDone ? 'var(--color-text-muted)' : 'var(--color-text)'};">Water &mdash; 120 oz</div>
               <div style="font-size: var(--text-sm); color: var(--color-text-faint);">3 × 40 oz bottles (Stanley or Hydroflask)</div>
             </div>
-            ${t.water ? '<span class="badge badge-success">✓ DONE</span>' : ''}
+            ${fp.water ? '<span class="badge" style="background: var(--color-gold); color: #000;">🎟️ FREE PASS</span>' : (waterDone ? '<span class="badge badge-success">✓ DONE</span>' : '')}
           </div>
-          <div style="display: flex; gap: var(--space-6); margin-top: var(--space-4); margin-left: 44px;">
+          <div style="display: flex; gap: var(--space-6); margin-top: var(--space-4); margin-left: 44px; opacity: ${fp.water ? '0.5' : '1'}; pointer-events: ${fp.water ? 'none' : 'auto'};">
             ${[1, 2, 3].map(i => `
               <div class="water-bottle ${dayRecord.waterBottles >= i ? 'water-bottle--filled' : ''}" 
                    data-index="${i}" 
@@ -582,33 +659,35 @@
               </div>
             `).join('')}
           </div>
+          ${renderFreePassRow('water')}
         </div>
-
+ 
         <!-- Task 5: Bible -->
-        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${t.bible ? 'var(--color-success)' : 'var(--color-border)'};" data-action="toggle" data-path="tasks.bible">
-          <div style="display: flex; align-items: center; gap: var(--space-4);">
+        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${fp.bible ? 'var(--color-gold)' : (bibleDone ? 'var(--color-success)' : 'var(--color-border)')};" data-action="toggle" data-path="tasks.bible">
+          <div style="display: flex; align-items: center; gap: var(--space-4); opacity: ${fp.bible ? '0.6' : '1'}; cursor: ${fp.bible ? 'default' : 'pointer'};">
             <div class="checkbox-task">
-              ${renderCheckbox(t.bible)}
+              ${renderCheckbox(bibleDone)}
             </div>
             <div style="flex: 1;">
-              <div style="font-weight: 700; color: ${t.bible ? 'var(--color-text-muted)' : 'var(--color-text)'};">Bible Reading & Prayer</div>
+              <div style="font-weight: 700; color: ${bibleDone ? 'var(--color-text-muted)' : 'var(--color-text)'};">Bible Reading & Prayer</div>
               <div style="font-size: var(--text-sm); color: var(--color-text-faint);">5 minutes &mdash; scripture + prayer</div>
             </div>
-            ${t.bible ? '<span class="badge badge-success">✓ DONE</span>' : ''}
+            ${fp.bible ? '<span class="badge" style="background: var(--color-gold); color: #000;">🎟️ FREE PASS</span>' : (bibleDone ? '<span class="badge badge-success">✓ DONE</span>' : '')}
           </div>
+          ${renderFreePassRow('bible')}
         </div>
-
+ 
         <!-- Task 6: Sleep -->
-        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${(t.sleep.bedtimeHit && t.sleep.wakeHit) ? 'var(--color-success)' : 'var(--color-border)'};">
+        <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${fp.sleep ? 'var(--color-gold)' : (sleepDone ? 'var(--color-success)' : 'var(--color-border)')};">
           <div style="display: flex; align-items: center; gap: var(--space-4); cursor: pointer;" onclick="document.getElementById('sleep-details').style.display = document.getElementById('sleep-details').style.display === 'none' ? 'block' : 'none'">
             <div class="checkbox-task">
-              ${renderCheckbox(t.sleep.bedtimeHit && t.sleep.wakeHit)}
+              ${renderCheckbox(sleepDone)}
             </div>
             <div style="flex: 1;">
-              <div style="font-weight: 700; color: ${(t.sleep.bedtimeHit && t.sleep.wakeHit) ? 'var(--color-text-muted)' : 'var(--color-text)'};">Sleep Window</div>
-              <div style="font-size: var(--text-sm); color: var(--color-text-faint);">In bed by 11:00 PM &middot; Up by 6:30 AM</div>
+              <div style="font-weight: 700; color: ${sleepDone ? 'var(--color-text-muted)' : 'var(--color-text)'};">Sleep Window</div>
+              <div style="font-size: var(--text-sm); color: var(--color-text-faint);">In bed night before by 11:00 PM &middot; Up day of by 6:30 AM</div>
             </div>
-            ${(t.sleep.bedtimeHit && t.sleep.wakeHit) ? '<span class="badge badge-success">✓ DONE</span>' : '<span style="font-size: 1.2rem;">▼</span>'}
+            ${fp.sleep ? '<span class="badge" style="background: var(--color-gold); color: #000;">🎟️ FREE PASS</span>' : (sleepDone ? '<span class="badge badge-success">✓ DONE</span>' : '<span style="font-size: 1.2rem;">▼</span>')}
           </div>
           
           <div id="sleep-details" style="display: none; margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border);">
@@ -616,14 +695,15 @@
               GRACE WINDOW: ±15 min
             </div>
             <div style="display: flex; flex-direction: column; gap: var(--space-3);">
-              <label style="display: flex; align-items: center; gap: var(--space-3);">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.sleep.bedtimeHit ? 'checked' : ''} data-action="toggle" data-path="tasks.sleep.bedtimeHit"> In bed by 11:00 PM (+15m = 11:15 PM)
+              <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${fp.sleep ? '0.5' : '1'};">
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.sleep.bedtimeHit ? 'checked' : ''} ${fp.sleep ? 'disabled' : ''} data-action="toggle" data-path="tasks.sleep.bedtimeHit"> In bed the night before by 11:00 PM (+15m = 11:15 PM)
               </label>
-              <label style="display: flex; align-items: center; gap: var(--space-3);">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.sleep.wakeHit ? 'checked' : ''} data-action="toggle" data-path="tasks.sleep.wakeHit"> Up by 6:30 AM (+15m = 6:45 AM)
+              <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${fp.sleep ? '0.5' : '1'};">
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.sleep.wakeHit ? 'checked' : ''} ${fp.sleep ? 'disabled' : ''} data-action="toggle" data-path="tasks.sleep.wakeHit"> Up the day of by 6:30 AM (+15m = 6:45 AM)
               </label>
             </div>
           </div>
+          ${renderFreePassRow('sleep')}
         </div>
 
       </section>
@@ -698,6 +778,9 @@
     // Water bottle clicks
     container.querySelectorAll('.water-bottle').forEach(el => {
       el.addEventListener('click', () => {
+        // Guard: ignore clicks if Free Pass is active today
+        if (dayRecord.tasks && dayRecord.tasks.freePasses && dayRecord.tasks.freePasses.water) return;
+
         const index = parseInt(el.dataset.index);
         dayRecord.waterBottles = index;
         if (index === 3) {
@@ -815,6 +898,12 @@
           statusClass = 'today';
         } else if (record && record.completed) {
           statusClass = 'completed';
+          if (record.tasks && record.tasks.freePasses) {
+            const hasFP = Object.values(record.tasks.freePasses).some(val => val === true);
+            if (hasFP) {
+              label = 'F';
+            }
+          }
         } else {
           if (i <= 14) {
              statusClass = 'missed-phase1';
@@ -825,10 +914,25 @@
         }
       }
       
-      let tooltip = record ? `Day ${i}: ${record.completed ? 'Completed' : 'Missed/Incomplete'} ${record.notes ? `\n"${record.notes}"` : ''}` : `Day ${i} (Future)`;
+      let tooltip = `Day ${i} (Future)`;
+      if (record) {
+        let statusText = record.completed ? 'Completed' : 'Missed/Incomplete';
+        if (record.tasks && record.tasks.freePasses) {
+          const activePasses = [];
+          Object.keys(record.tasks.freePasses).forEach(taskKey => {
+            if (record.tasks.freePasses[taskKey]) {
+              activePasses.push(taskKey.charAt(0).toUpperCase() + taskKey.slice(1));
+            }
+          });
+          if (activePasses.length > 0) {
+            statusText += ` (Free Pass: ${activePasses.join(', ')})`;
+          }
+        }
+        tooltip = `Day ${i}: ${statusText}${record.notes ? `\n"${record.notes}"` : ''}`;
+      }
       
       calendarCells += `
-        <div class="calendar-cell calendar-cell--${statusClass}" title="${tooltip}">
+        <div class="calendar-cell calendar-cell--${statusClass}" title="${tooltip}" style="${label === 'F' ? 'border: 1px solid var(--color-gold); color: var(--color-gold); font-weight: 800;' : ''}">
           ${label}
         </div>
       `;
@@ -1022,7 +1126,7 @@
       },
       {
         n: 6, icon: '😴', title: 'SLEEP WINDOW',
-        body: 'In bed by 11:00 PM (±15 min). Up by 6:30 AM (±15 min). Both required for sleep rule to count.'
+        body: 'In bed the night before by 11:00 PM (±15 min). Up the day of by 6:30 AM (±15 min). Both required to count.\n\nThis ensures a late night only affects a single day\'s window (the following day) rather than dragging across two consecutive days.'
       },
     ];
 
