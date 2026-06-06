@@ -453,6 +453,13 @@
     const editingDateObj = new Date(todayKey + 'T00:00:00');
     const editingDateStr = editingDateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
+    const dayOfWeek = editingDateObj.getDay(); // 0 = Sunday, 6 = Saturday
+    const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+    const sleepBedtime = isWeekend ? "11:30 PM" : "11:00 PM";
+    const sleepBedtimeGrace = isWeekend ? "11:45 PM" : "11:15 PM";
+    const sleepWake = isWeekend ? "7:00 AM" : "6:30 AM";
+    const sleepWakeGrace = isWeekend ? "7:15 AM" : "6:45 AM";
+
     const pGoal = state.settings.proteinGoal || 175;
     const cCeil = state.settings.calorieCeiling || 2700;
     const pGrace = Math.round(pGoal * 0.8);
@@ -685,7 +692,7 @@
             </div>
             <div style="flex: 1;">
               <div style="font-weight: 700; color: ${sleepDone ? 'var(--color-text-muted)' : 'var(--color-text)'};">Sleep Window</div>
-              <div style="font-size: var(--text-sm); color: var(--color-text-faint);">In bed night before by 11:00 PM &middot; Up day of by 6:30 AM</div>
+              <div style="font-size: var(--text-sm); color: var(--color-text-faint);">In bed night before by ${sleepBedtime} &middot; Up day of by ${sleepWake}</div>
             </div>
             ${fp.sleep ? '<span class="badge" style="background: var(--color-gold); color: #000;">🎟️ FREE PASS</span>' : (sleepDone ? '<span class="badge badge-success">✓ DONE</span>' : '<span style="font-size: 1.2rem;">▼</span>')}
           </div>
@@ -696,10 +703,10 @@
             </div>
             <div style="display: flex; flex-direction: column; gap: var(--space-3);">
               <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${fp.sleep ? '0.5' : '1'};">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.sleep.bedtimeHit ? 'checked' : ''} ${fp.sleep ? 'disabled' : ''} data-action="toggle" data-path="tasks.sleep.bedtimeHit"> In bed the night before by 11:00 PM (+15m = 11:15 PM)
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.sleep.bedtimeHit ? 'checked' : ''} ${fp.sleep ? 'disabled' : ''} data-action="toggle" data-path="tasks.sleep.bedtimeHit"> In bed the night before by ${sleepBedtime} (+15m = ${sleepBedtimeGrace})
               </label>
               <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${fp.sleep ? '0.5' : '1'};">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.sleep.wakeHit ? 'checked' : ''} ${fp.sleep ? 'disabled' : ''} data-action="toggle" data-path="tasks.sleep.wakeHit"> Up the day of by 6:30 AM (+15m = 6:45 AM)
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.sleep.wakeHit ? 'checked' : ''} ${fp.sleep ? 'disabled' : ''} data-action="toggle" data-path="tasks.sleep.wakeHit"> Up the day of by ${sleepWake} (+15m = ${sleepWakeGrace})
               </label>
             </div>
           </div>
@@ -1126,7 +1133,7 @@
       },
       {
         n: 6, icon: '😴', title: 'SLEEP WINDOW',
-        body: 'In bed the night before by 11:00 PM (±15 min). Up the day of by 6:30 AM (±15 min). Both required to count.\n\nThis ensures a late night only affects a single day\'s window (the following day) rather than dragging across two consecutive days.'
+        body: 'In bed the night before by 11:00 PM (±15 min). Up the day of by 6:30 AM (±15 min). Both required to count.\n\nWeekends (Saturday & Sunday entries) are shifted to: Bedtime by 11:30 PM (±15 min) and Wake by 7:00 AM (±15 min).\n\nThis ensures a late night only affects a single day\'s window (the following day) rather than dragging across two consecutive days.'
       },
     ];
 
@@ -1298,6 +1305,10 @@
         <section class="section fade-in-up">
           <h2 class="section__title">Sleep Window</h2>
           <div class="card" style="display:flex;flex-direction:column;gap:var(--space-5);">
+
+            <div style="font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.4; border-bottom: 1px solid var(--color-border); padding-bottom: var(--space-2); margin-bottom: var(--space-1);">
+              ℹ️ Weekday rules are configured below. Weekends automatically shift to 11:30 PM Bedtime (11:45 PM grace) and 7:00 AM Wake time (7:15 AM grace).
+            </div>
 
             <div>
               <label style="${labelStyle}" for="s-bedtime">Bedtime Target</label>
