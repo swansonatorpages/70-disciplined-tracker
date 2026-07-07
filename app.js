@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   70 Disciplined — Data Layer
+   Monthly Disciplined — Data Layer
    ═══════════════════════════════════════════════════════ */
 
 (function() {
@@ -8,17 +8,13 @@
   const defaultState = {
     version: 1,
     programStart: null,
-    currentPhase: "setup",
-    phase1Start: null,
-    phase2Start: null,
+    programLengthDays: 30,
     days: {},
     streak: {
       current: 0,
       longest: 0,
       lastCompletedDate: null
     },
-    phase1MissedDays: [],
-    phase1FrictionLog: [],
     mulligansUsed: 0,
     settings: {
       bedtimeTarget: "23:00",
@@ -39,10 +35,7 @@
     },
     photo: false,
     diet: {
-      weighed: false,
-      tracked: false,
-      proteinMet: false,
-      caloriesOk: false,
+      slowCarbCompliant: false,
       cheatDay: false
     },
     water: false,
@@ -56,7 +49,8 @@
       photo: false,
       water: false,
       bible: false,
-      sleep: false
+      sleep: false,
+      slowCarbCompliant: false
     },
     celebrationFired: false
   };
@@ -150,29 +144,9 @@
     
     const diffTime = target - start;
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays + 1;
-  }
-
-  // 6. getCurrentPhaseDay(dateString)
-  function getCurrentPhaseDay(dateString) {
-    let startStr = null;
-    if (window.App.state.currentPhase === 'phase1') {
-      startStr = window.App.state.phase1Start || window.App.state.programStart;
-    } else if (window.App.state.currentPhase === 'phase2') {
-      startStr = window.App.state.phase2Start;
-    }
-    
-    if (!startStr) return 0;
-
-    const partsStart = startStr.split('-');
-    const start = new Date(partsStart[0], partsStart[1] - 1, partsStart[2]);
-    
-    const partsTarget = dateString.split('-');
-    const target = new Date(partsTarget[0], partsTarget[1] - 1, partsTarget[2]);
-    
-    const diffTime = target - start;
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays + 1;
+    const dayNum = diffDays + 1;
+    const maxDays = window.App.state.programLengthDays || 30;
+    return Math.min(dayNum, maxDays);
   }
 
   // 7. toggleTask(taskPath, value, dateKey)
@@ -244,8 +218,7 @@
     const workoutDone = fp.workout || (typeof workoutVal === 'boolean' ? workoutVal : (workoutVal.activeMinutes || workoutVal.steps || workoutVal.caloriesBurned));
     const photoDone = fp.photo || t.photo;
     
-    const dietDone = t.diet.cheatDay || 
-                     (t.diet.weighed && t.diet.tracked && t.diet.proteinMet && t.diet.caloriesOk);
+    const dietDone = t.diet.cheatDay || t.diet.slowCarbCompliant;
                      
     const waterDone = fp.water || t.water;
     const bibleDone = fp.bible || t.bible;
@@ -277,7 +250,7 @@
 
     while (true) {
       const record = window.App.state.days[checkingKey];
-      if (record && isDayComplete(record)) {
+      if (record && (isDayComplete(record) || record.flexDayApplied === true || record.mulliganApplied === true)) {
         currentStreak++;
         if (!lastCompleted) lastCompleted = checkingKey;
       } else {
@@ -339,6 +312,30 @@
       }
     }
     return true;
+  }
+
+  function setLocationMode(mode) {
+    window.App.state.locationMode = mode;
+    saveState();
+  }
+
+  function getFlexDaysRemaining() {
+    const max = window.App.state.flexDaysMax || 0;
+    const used = window.App.state.flexDaysUsed || 0;
+    return max - used;
+  }
+
+  function useFlexDay(dateKey) {
+    if (getFlexDaysRemaining() > 0) {
+      window.App.state.flexDaysUsed = (window.App.state.flexDaysUsed || 0) + 1;
+      const record = getTodayRecord(dateKey);
+      if (record) {
+        record.flexDayApplied = true;
+      }
+      saveState();
+      return true;
+    }
+    return false;
   }
 
   // 12. getPhase1FrictionSummary()
@@ -423,7 +420,6 @@
     getTodayKey,
     getTodayRecord,
     getDayNumber,
-    getCurrentPhaseDay,
     toggleTask,
     isDayComplete,
     recalculateStreak,
@@ -432,7 +428,10 @@
     getPhase1FrictionSummary,
     exportData,
     importData,
-    getTaskFreePassesUsedCount
+    getTaskFreePassesUsedCount,
+    setLocationMode,
+    getFlexDaysRemaining,
+    useFlexDay
   };
 
   // 15. renderTodayView(container)
@@ -442,7 +441,6 @@
     const todayKey = window.App.activeDateKey || App.getTodayKey();
     const dayRecord = App.getTodayRecord(todayKey);
     const dayNum = App.getDayNumber(todayKey);
-    const phaseDayNum = App.getCurrentPhaseDay(todayKey);
     const isComplete = App.isDayComplete(dayRecord);
     const streak = state.streak.current;
     const isPhase1 = state.currentPhase === 'phase1';
@@ -485,7 +483,7 @@
     const sleepDone = fp.sleep || (t.sleep.bedtimeHit && t.sleep.wakeHit);
 
     // Diet Expandable logic
-    const dietChecked = t.diet.cheatDay || (t.diet.weighed && t.diet.tracked && t.diet.proteinMet && t.diet.caloriesOk);
+    const dietChecked = t.diet.cheatDay || t.diet.slowCarbCompliant;
 
     // Helper: generate standard Free Pass footer row inside task cards
     const renderFreePassRow = (taskKey) => {
@@ -533,7 +531,7 @@
         <div class="header__brand">
           <span class="icon-flame icon-flame--lg icon-flame-hero" style="${isComplete ? 'filter: hue-rotate(80deg) drop-shadow(0 0 12px #22c55e);' : ''}"></span>
           <h1 class="header__title" style="font-family: var(--font-display); letter-spacing: 0.06em; background: ${isComplete ? 'linear-gradient(135deg, #4ade80, #22c55e)' : 'linear-gradient(135deg, #fdba74, var(--color-primary))'}; -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
-            PHASE ${state.currentPhase === 'phase1' ? '1' : state.currentPhase === 'phase2' ? '2' : '0'} &mdash; DAY ${phaseDayNum} / 70
+            DAY ${dayNum} / ${state.programLengthDays || 30}
           </h1>
         </div>
       </header>
@@ -602,13 +600,13 @@
         <!-- Task 3: Diet -->
         <div class="card fade-in-up" style="margin-bottom: var(--space-3); border-color: ${dietChecked ? 'var(--color-success)' : 'var(--color-border)'};">
           <div style="display: flex; align-items: center; gap: var(--space-4); cursor: pointer;" onclick="document.getElementById('diet-details').style.display = document.getElementById('diet-details').style.display === 'none' ? 'block' : 'none'">
-            <div class="checkbox-task" data-action="toggle" data-path="tasks.diet.weighed"> <!-- dummy toggle target visually -->
+            <div class="checkbox-task" ${t.diet.cheatDay ? '' : 'data-action="toggle" data-path="tasks.diet.slowCarbCompliant"'}>
               ${renderCheckbox(dietChecked)}
             </div>
             <div style="flex: 1;">
               <div style="font-weight: 700; color: ${dietChecked ? 'var(--color-text-muted)' : 'var(--color-text)'};">Diet & Nutrition</div>
               <div style="font-size: var(--text-sm); color: var(--color-text-faint);">
-                ${t.diet.cheatDay ? 'Cheat day used today' : `Protein: ${dayRecord.proteinLogged || 0}/${pGoal}g &middot; Cals: ${dayRecord.caloriesLogged || '–'}/${cCeil}`}
+                ${t.diet.cheatDay ? 'Cheat day used today' : (t.diet.slowCarbCompliant ? 'Slow-Carb compliant' : 'Pending')}
               </div>
             </div>
             ${t.diet.cheatDay ? '<span class="badge" style="background: var(--color-gold); color: #000;">CHEAT DAY</span>' : (dietChecked ? '<span class="badge badge-success">✓ DONE</span>' : '<span style="font-size: 1.2rem;">▼</span>')}
@@ -617,23 +615,19 @@
           <div id="diet-details" style="display: none; margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--color-border);">
             <div style="display: flex; flex-direction: column; gap: var(--space-3);">
               <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${t.diet.cheatDay ? '0.5' : '1'};">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.weighed ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.weighed"> Daily weigh-in
-              </label>
-              <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${t.diet.cheatDay ? '0.5' : '1'};">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.tracked ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.tracked"> Cal AI tracked today
-              </label>
-              <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${t.diet.cheatDay ? '0.5' : '1'};">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.proteinMet ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.proteinMet"> ${pGoal}g protein hit (-20% grace window : ${pGrace}g)
-              </label>
-              <label style="display: flex; align-items: center; gap: var(--space-3); opacity: ${t.diet.cheatDay ? '0.5' : '1'};">
-                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.caloriesOk ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.caloriesOk"> Under ${cCeil.toLocaleString()} calories (+10% grace window : ${cGrace.toLocaleString()})
+                <input type="checkbox" style="width: 20px; height: 20px; accent-color: var(--color-primary);" ${t.diet.slowCarbCompliant ? 'checked' : ''} ${t.diet.cheatDay ? 'disabled' : ''} data-action="toggle" data-path="tasks.diet.slowCarbCompliant"> Stuck to Slow-Carb rules today
               </label>
 
-              <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-2); margin-top: var(--space-2);">
-                <input type="number" id="input-weight" placeholder="Weight" value="${dayRecord.weight || ''}" style="width: 100%; padding: var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); color: #fff; border-radius: var(--radius-md); font-size: 16px;">
-                <input type="number" id="input-cals" placeholder="Cals" value="${dayRecord.caloriesLogged || ''}" style="width: 100%; padding: var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); color: #fff; border-radius: var(--radius-md); font-size: 16px;">
-                <input type="number" id="input-protein" placeholder="Protein" value="${dayRecord.proteinLogged || ''}" style="width: 100%; padding: var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); color: #fff; border-radius: var(--radius-md); font-size: 16px;">
-              </div>
+              ${t.diet.cheatDay && !dayRecord.weight ? `
+                <div style="display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-2);">
+                  <label for="input-weight" style="font-size: var(--text-xs); color: var(--color-gold); font-weight: 600;">Log weight before your cheat day begins</label>
+                  <input type="number" id="input-weight" placeholder="Morning Weigh-In" value="" style="width: 100%; padding: var(--space-2); background: var(--color-surface); border: 1px solid var(--color-gold); color: #fff; border-radius: var(--radius-md); font-size: 16px;">
+                </div>
+              ` : `
+                <div style="display: flex; flex-direction: column; gap: var(--space-1); margin-top: var(--space-2);">
+                  <input type="number" id="input-weight" placeholder="Weight" value="${dayRecord.weight || ''}" style="width: 100%; padding: var(--space-2); background: var(--color-surface); border: 1px solid var(--color-border); color: #fff; border-radius: var(--radius-md); font-size: 16px;">
+                </div>
+              `}
 
               ${cheatAvailable || t.diet.cheatDay ? `
                 <button class="btn-ghost" style="margin-top: var(--space-3); width: 100%; border-color: var(--color-gold); color: var(--color-gold);" data-action="toggle" data-path="tasks.diet.cheatDay">
@@ -769,14 +763,12 @@
     });
 
     // Diet numeric inputs
-    ['weight', 'cals', 'protein'].forEach(field => {
+    ['weight'].forEach(field => {
       const input = container.querySelector(`#input-${field}`);
       if (input) {
         input.addEventListener('change', (e) => {
           const val = parseFloat(e.target.value);
           if (field === 'weight') dayRecord.weight = val;
-          if (field === 'cals') dayRecord.caloriesLogged = val;
-          if (field === 'protein') dayRecord.proteinLogged = val;
           App.saveState();
         });
       }
@@ -865,21 +857,28 @@
     const currentDayNum = App.getDayNumber(todayKey);
     
     // Calculate completions
-    let phase1Completed = 0;
-    let phase2Completed = 0;
+    let totalCompleted = 0;
     let weightData = [];
+    let travelDaysLogged = 0;
+    let travelDaysMet = 0;
     
     Object.keys(state.days).sort().forEach(key => {
       const record = state.days[key];
       if (record.completed) {
-        if (record.phase === 'phase1') phase1Completed++;
-        if (record.phase === 'phase2') phase2Completed++;
+        totalCompleted++;
       }
       if (record.weight) {
         weightData.push({ day: record.dayNumber, weight: record.weight });
       }
+      if (record.locationMode === 'travel') {
+        travelDaysLogged++;
+        if (record.completed) {
+          travelDaysMet++;
+        }
+      }
     });
     
+    const adaptabilityScore = travelDaysLogged > 0 ? Math.round((travelDaysMet / travelDaysLogged) * 100) : 100;
     const frictionSummary = App.getPhase1FrictionSummary();
     
     let calendarCells = '';
@@ -887,7 +886,8 @@
     const parts = startStr.split('-');
     const startDate = new Date(parts[0], parts[1] - 1, parts[2]);
     
-    for (let i = 1; i <= 70; i++) {
+    const maxDays = state.programLengthDays || 30;
+    for (let i = 1; i <= maxDays; i++) {
       let d = new Date(startDate);
       d.setDate(d.getDate() + i - 1);
       const year = d.getFullYear();
@@ -912,12 +912,8 @@
             }
           }
         } else {
-          if (i <= 14) {
-             statusClass = 'missed-phase1';
-             label = 'M';
-          } else {
-             statusClass = 'failed-phase2';
-          }
+          statusClass = 'missed';
+          label = 'M';
         }
       }
       
@@ -982,13 +978,9 @@
       `;
     }
     
-    const totalCompleted = phase1Completed + phase2Completed;
-    const progressPercent = Math.min((totalCompleted / 70) * 100, 100);
-    const p1Progress = Math.min((phase1Completed / 14) * 100, 100);
-    const p2Progress = Math.min((phase2Completed / 56) * 100, 100);
-    const displayDay = state.programStart ? Math.min(Math.max(currentDayNum, 1), 70) : 0;
-    const showPhaseTransition = state.currentPhase === 'phase1' && currentDayNum > 14;
-
+    const progressPercent = Math.min((totalCompleted / maxDays) * 100, 100);
+    const displayDay = state.programStart ? Math.min(Math.max(currentDayNum, 1), maxDays) : 0;
+ 
     let html = `
       <style>
         .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-2); margin-top: var(--space-4); }
@@ -996,37 +988,19 @@
         .calendar-cell:active { transform: scale(0.9); }
         .calendar-cell--future { background: var(--color-surface-offset); }
         .calendar-cell--completed { background: var(--color-success); color: #fff; box-shadow: 0 0 8px var(--color-success-dim); }
-        .calendar-cell--missed-phase1 { background: oklch(from var(--color-phase1) l c h / 0.15); color: var(--color-phase1); border: 1.5px dashed var(--color-phase1); }
-        .calendar-cell--failed-phase2 { background: var(--color-danger); color: #fff; box-shadow: 0 0 8px oklch(from var(--color-danger) l c h / 0.3); }
+        .calendar-cell--missed { background: oklch(from var(--color-primary) l c h / 0.15); color: var(--color-primary); border: 1.5px dashed var(--color-primary); }
         .calendar-cell--today { border: 2px solid var(--color-primary); box-shadow: 0 0 10px var(--color-primary-dim); animation: pulse 2s infinite; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 oklch(from var(--color-primary) l c h / 0.4); } 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
       </style>
-
+ 
       <header class="header fade-in-up">
         <h1 class="header__title" style="font-family: var(--font-display); font-size: var(--text-xl); letter-spacing: 0.06em; margin-bottom: var(--space-6);">
-          YOUR 70 DISCIPLINED JOURNEY
+          YOUR ${maxDays} DISCIPLINED JOURNEY
         </h1>
-        
-        <div style="display: flex; gap: var(--space-3); margin-bottom: var(--space-6); text-align: left;">
-          <div class="card" style="flex: 1; padding: var(--space-3);">
-            <div class="badge badge-phase1" style="margin-bottom: var(--space-2);">14-DAY CALIBRATION</div>
-            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-1); font-weight: 600;">COMPLETED: ${phase1Completed} / 14</div>
-            <div class="progress-bar-outer" style="height: 6px;">
-              <div class="progress-bar-inner" style="width: ${p1Progress}%; background: var(--color-phase1);"></div>
-            </div>
-          </div>
-          <div class="card" style="flex: 1; padding: var(--space-3); opacity: ${state.currentPhase === 'setup' || state.currentPhase === 'phase1' ? '0.4' : '1'};">
-            <div class="badge badge-phase2" style="margin-bottom: var(--space-2);">56-DAY CHALLENGE</div>
-            <div style="font-size: var(--text-xs); color: var(--color-text-muted); margin-bottom: var(--space-1); font-weight: 600;">COMPLETED: ${phase2Completed} / 56</div>
-            <div class="progress-bar-outer" style="height: 6px;">
-              <div class="progress-bar-inner" style="width: ${p2Progress}%;"></div>
-            </div>
-          </div>
-        </div>
-
+ 
         <div style="text-align: left; margin-bottom: var(--space-6);">
           <div style="display: flex; justify-content: space-between; margin-bottom: var(--space-2);">
-            <div style="font-family: var(--font-display); font-size: var(--text-lg); letter-spacing: 0.04em;">DAY ${displayDay} OF 70</div>
+            <div style="font-family: var(--font-display); font-size: var(--text-lg); letter-spacing: 0.04em;">DAY ${displayDay} OF ${maxDays}</div>
             <div style="font-weight: 700; color: var(--color-text-muted);">${Math.round(progressPercent)}%</div>
           </div>
           <div class="progress-bar-outer">
@@ -1034,8 +1008,8 @@
           </div>
         </div>
       </header>
-
-      <section class="section fade-in-up stagger">
+ 
+      <section class="section fade-in-up stagger" style="display: flex; flex-direction: column; gap: var(--space-4);">
         <div class="card" style="text-align: center; display: flex; flex-direction: column; align-items: center; padding: var(--space-6);">
           <span class="icon-flame icon-flame--xl" style="${state.streak.current >= 7 ? 'filter: sepia(1) saturate(4) hue-rotate(5deg) drop-shadow(0 0 16px #fbbf24);' : ''}"></span>
           <div style="font-family: var(--font-display); font-size: clamp(3rem, 5vw, 4.5rem); color: ${state.streak.current >= 7 ? 'var(--color-gold)' : 'var(--color-primary)'}; line-height: 1; margin-top: var(--space-2);">
@@ -1049,8 +1023,20 @@
             ${state.streak.current === 0 ? 'Start your streak today.' : `LONGEST: ${state.streak.longest} days`}
           </div>
         </div>
-      </section>
 
+        <div class="card" style="text-align: center; display: flex; flex-direction: column; align-items: center; padding: var(--space-6);">
+          <span style="font-size: 2rem; margin-top: var(--space-2);">🧭</span>
+          <div style="font-family: var(--font-display); font-size: clamp(3rem, 5vw, 4.5rem); color: var(--color-primary); line-height: 1; margin-top: var(--space-2);">
+            ${adaptabilityScore}%
+          </div>
+          <div style="font-weight: 800; font-size: var(--text-sm); letter-spacing: 0.15em; color: var(--color-text-faint); margin-bottom: var(--space-2);">ADAPTABILITY SCORE</div>
+          
+          <div style="font-size: var(--text-sm); color: var(--color-text-muted);">
+            Travel Days: ${travelDaysMet} / ${travelDaysLogged} completed
+          </div>
+        </div>
+      </section>
+ 
       <section class="section fade-in-up stagger">
         <h2 class="section__title">CALENDAR</h2>
         <div class="card" style="padding: var(--space-5) var(--space-4);">
@@ -1059,7 +1045,7 @@
           </div>
         </div>
       </section>
-
+ 
       ${frictionSummary.length > 0 ? `
       <section class="section fade-in-up stagger">
         <h2 class="section__title">FRICTION LOG</h2>
@@ -1078,34 +1064,18 @@
           </ul>
         </div>
       </section>` : ''}
-
+ 
       <section class="section fade-in-up stagger">
         <h2 class="section__title">WEIGHT TREND</h2>
         <div class="card" style="padding: var(--space-5) var(--space-4);">
           ${sparklineHTML}
         </div>
       </section>
-
-      ${showPhaseTransition ? `
-      <section class="section fade-in-up stagger">
-        <button id="btn-lock-phase2" class="btn-primary" style="width: 100%; font-size: var(--text-base); padding: var(--space-4); margin-bottom: var(--space-8);">LOCK IN PHASE 2 →</button>
-      </section>
-      ` : ''}
-
+ 
       <div style="height: 60px;"></div>
     `;
-
+ 
     container.innerHTML = html;
-
-    const btnLock = container.querySelector('#btn-lock-phase2');
-    if (btnLock) {
-      btnLock.addEventListener('click', () => {
-        if (confirm("Are you ready to begin the 56-Day Challenge? Rules are now locked. No restarts, no changes.")) {
-          App.advancePhase();
-          App.renderProgressView(container);
-        }
-      });
-    }
   };
 
   // 17. renderRulesView ───────────────────────────────
@@ -1135,6 +1105,10 @@
         n: 6, icon: '😴', title: 'SLEEP WINDOW',
         body: 'In bed the night before by 11:00 PM (±15 min). Up the day of by 6:30 AM (±15 min). Both required to count.\n\nWeekends (Saturday & Sunday entries) are shifted to: Bedtime by 11:30 PM (±15 min) and Wake by 7:00 AM (±15 min).\n\nThis ensures a late night only affects a single day\'s window (the following day) rather than dragging across two consecutive days.'
       },
+      {
+        n: 7, icon: '🧭', title: 'LOCATION & FLEX DAYS',
+        body: 'Set your Location Mode (Home, Travel, or Disrupted) to adjust targets dynamically. Use Flex Days when life causes unexpected disruptions to protect your streak.'
+      }
     ];
 
     container.innerHTML = `
@@ -1147,30 +1121,25 @@
             <h1 style="font-family:var(--font-display);font-size:var(--text-xl);letter-spacing:0.06em;
                         background:linear-gradient(135deg,#fdba74,var(--color-primary));
                         -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1.1;">
-              THE 70 DISCIPLINED<br>CHALLENGE
+              THE 30 DISCIPLINED<br>CHALLENGE
             </h1>
           </div>
           <p style="font-family:var(--font-body);font-size:var(--text-sm);color:var(--color-text-muted);margin-bottom:var(--space-6);">
             Built for discipline. Tailored for real life.
           </p>
 
-          <div style="display:flex;gap:var(--space-3);margin-bottom:var(--space-8);">
-            <div class="card" style="flex:1;padding:var(--space-4);border-top:3px solid var(--color-phase1);">
-              <div class="badge badge-phase1" style="margin-bottom:var(--space-2);">PHASE 1</div>
-              <div style="font-family:var(--font-display);font-size:var(--text-lg);color:var(--color-phase1);line-height:1.1;margin-bottom:var(--space-2);">14-DAY<br>CALIBRATION</div>
-              <p style="font-size:var(--text-xs);color:var(--color-text-muted);line-height:1.6;">Test the rules, find your friction points, and calibrate before the real challenge begins.</p>
-            </div>
-            <div class="card" style="flex:1;padding:var(--space-4);border-top:3px solid var(--color-primary);">
-              <div class="badge badge-phase2" style="margin-bottom:var(--space-2);">PHASE 2</div>
-              <div style="font-family:var(--font-display);font-size:var(--text-lg);color:var(--color-primary);line-height:1.1;margin-bottom:var(--space-2);">56-DAY<br>CHALLENGE</div>
-              <p style="font-size:var(--text-xs);color:var(--color-text-muted);line-height:1.6;">Full execution. No changes. No restarts. Locked rules. This is where the compound effect kicks in.</p>
+          <div style="margin-bottom:var(--space-8);">
+            <div class="card" style="padding:var(--space-4);border-top:3px solid var(--color-primary);">
+              <div class="badge badge-phase2" style="margin-bottom:var(--space-2);">CHALLENGE</div>
+              <div style="font-family:var(--font-display);font-size:var(--text-lg);color:var(--color-primary);line-height:1.1;margin-bottom:var(--space-2);">30-DAY CHALLENGE</div>
+              <p style="font-size:var(--text-xs);color:var(--color-text-muted);line-height:1.6;">30 days of full execution. Built to build habits that compound into results. Build discipline, track progress, and adapt to your real life.</p>
             </div>
           </div>
         </header>
 
-        <!-- Section 2: The 6 Rules -->
+        <!-- Section 2: The 7 Rules -->
         <section class="section fade-in-up">
-          <h2 class="section__title">THE 6 DAILY RULES</h2>
+          <h2 class="section__title">THE 7 DAILY RULES</h2>
           <div style="display:flex;flex-direction:column;gap:var(--space-3);">
             ${RULES.map(r => `
               <div class="card" style="box-shadow:inset 3px 0 0 var(--color-primary),var(--shadow-md);padding:var(--space-4) var(--space-4) var(--space-4) var(--space-5);">
@@ -1178,7 +1147,7 @@
                   <span style="font-family:var(--font-display);font-size:var(--text-xl);color:var(--color-primary);line-height:1;min-width:1.4rem;">${r.n}</span>
                   <div>
                     <div style="font-family:var(--font-display);font-size:var(--text-base);letter-spacing:0.05em;color:var(--color-text);">
-                      ${r.icon} ${r.title}
+                       ${r.icon} ${r.title}
                     </div>
                   </div>
                 </div>
@@ -1188,24 +1157,16 @@
           </div>
         </section>
 
-        <!-- Section 3: Phase Rules -->
+        <!-- Section 3: Program Rules -->
         <section class="section fade-in-up">
-          <h2 class="section__title">PHASE RULES</h2>
+          <h2 class="section__title">CHALLENGE RULES</h2>
           <div style="display:flex;flex-direction:column;gap:var(--space-3);">
-            <div class="card" style="box-shadow:inset 3px 0 0 var(--color-phase1),var(--shadow-md);padding:var(--space-4) var(--space-4) var(--space-4) var(--space-5);">
-              <div style="font-family:var(--font-display);font-size:var(--text-base);color:var(--color-phase1);letter-spacing:0.05em;margin-bottom:var(--space-2);">
-                PHASE 1 — CALIBRATION (14 DAYS)
-              </div>
-              <p style="font-size:var(--text-sm);color:var(--color-text-muted);line-height:1.7;">
-                Test the rules. Log friction. Misses are noted but do <strong style="color:var(--color-text);">NOT</strong> restart the program. Adjust settings before Phase 2.
-              </p>
-            </div>
             <div class="card" style="box-shadow:inset 3px 0 0 var(--color-primary),var(--shadow-md);padding:var(--space-4) var(--space-4) var(--space-4) var(--space-5);">
               <div style="font-family:var(--font-display);font-size:var(--text-base);color:var(--color-primary);letter-spacing:0.05em;margin-bottom:var(--space-2);">
-                PHASE 2 — THE CHALLENGE (56 DAYS)
+                30-DAY CHALLENGE
               </div>
               <p style="font-size:var(--text-sm);color:var(--color-text-muted);line-height:1.7;">
-                Full execution. No rule changes. No restarts. This is the real challenge.
+                Full execution. Set your start date and stay disciplined for 30 consecutive days. Build consistency day by day.
               </p>
             </div>
           </div>
@@ -1254,7 +1215,7 @@
             SETTINGS
           </h1>
           <p style="font-size:var(--text-sm);color:var(--color-text-muted);margin-top:var(--space-1);">
-            Customize before Phase 2 locks your rules.
+            Customize your daily targets.
           </p>
         </header>
 
@@ -1344,44 +1305,61 @@
               data-setting="__programStart">
             ${programStarted
               ? `<div style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:var(--space-2);">Start date is locked once the program begins.</div>`
-              : `<div style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:var(--space-2);">Set before starting Phase 1. Locks on first day.</div>`
+              : `<div style="font-size:var(--text-xs);color:var(--color-text-faint);margin-top:var(--space-2);">Set before starting the program. Locks on first day.</div>`
             }
           </div>
         </section>
 
-        <!-- FORGOT TO MARK -->
+        <!-- FORGOT TO MARK / FLEX DAYS -->
         <section class="section fade-in-up">
           <h2 class="section__title">Forgot to Mark?</h2>
-          <div class="card" style="display:flex;flex-direction:column;gap:var(--space-4);">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
-              <div>
-                <div style="font-weight:700;font-size:var(--text-sm);color:var(--color-text);">Mulligans</div>
-                <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:2px;">Go back and edit a previous day</div>
+          <div style="display:flex;flex-direction:column;gap:var(--space-4);">
+            <div class="card" style="display:flex;flex-direction:column;gap:var(--space-4);">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                  <div style="font-weight:700;font-size:var(--text-sm);color:var(--color-text);">Mulligans</div>
+                  <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:2px;">Go back and edit a previous day</div>
+                </div>
+                <div style="font-family:var(--font-display);font-size:var(--text-lg);color:${(10 - (window.App.state.mulligansUsed || 0)) > 0 ? 'var(--color-primary)' : 'var(--color-danger)'};">
+                  ${10 - (window.App.state.mulligansUsed || 0)} / 10
+                </div>
               </div>
-              <div style="font-family:var(--font-display);font-size:var(--text-lg);color:${(10 - (window.App.state.mulligansUsed || 0)) > 0 ? 'var(--color-primary)' : 'var(--color-danger)'};">
-                ${10 - (window.App.state.mulligansUsed || 0)} / 10
+              <div style="background:var(--color-surface-offset);height:6px;border-radius:99px;overflow:hidden;">
+                <div style="height:100%;width:${((10 - (window.App.state.mulligansUsed || 0)) / 10) * 100}%;background:var(--color-primary);border-radius:99px;transition:width 0.3s;"></div>
+              </div>
+              ${(10 - (window.App.state.mulligansUsed || 0)) > 0 ? `
+                <div>
+                  <label style="${labelStyle}" for="mulligan-date">Select a date to edit</label>
+                  <input id="mulligan-date" type="date"
+                    min="${window.App.state.programStart || ''}"
+                    max="${window.App.getTodayKey()}"
+                    style="${fieldStyle}"
+                    placeholder="Pick a date">
+                </div>
+                <button id="btn-use-mulligan" class="btn-primary" style="width:100%;">
+                  📝 Use Mulligan & Edit Day
+                </button>
+              ` : `
+                <div style="text-align:center;padding:var(--space-3);color:var(--color-text-muted);font-size:var(--text-sm);font-weight:600;">
+                  🚫 All mulligans used — no more edits allowed.
+                </div>
+              `}
+            </div>
+
+            <div class="card" style="display:flex;flex-direction:column;gap:var(--space-4);">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                  <div style="font-weight:700;font-size:var(--text-sm);color:var(--color-text);">Flex Days</div>
+                  <div style="font-size:var(--text-xs);color:var(--color-text-muted);margin-top:2px;">Remaining flex days allowed</div>
+                </div>
+                <div style="font-family:var(--font-display);font-size:var(--text-lg);color:${window.App.getFlexDaysRemaining() > 0 ? 'var(--color-primary)' : 'var(--color-danger)'};">
+                  ${window.App.getFlexDaysRemaining()} / ${window.App.state.flexDaysMax || 0}
+                </div>
+              </div>
+              <div style="background:var(--color-surface-offset);height:6px;border-radius:99px;overflow:hidden;">
+                <div style="height:100%;width:${(window.App.state.flexDaysMax || 0) > 0 ? (window.App.getFlexDaysRemaining() / window.App.state.flexDaysMax) * 100 : 0}%;background:var(--color-primary);border-radius:99px;transition:width 0.3s;"></div>
               </div>
             </div>
-            <div style="background:var(--color-surface-offset);height:6px;border-radius:99px;overflow:hidden;">
-              <div style="height:100%;width:${((10 - (window.App.state.mulligansUsed || 0)) / 10) * 100}%;background:var(--color-primary);border-radius:99px;transition:width 0.3s;"></div>
-            </div>
-            ${(10 - (window.App.state.mulligansUsed || 0)) > 0 ? `
-              <div>
-                <label style="${labelStyle}" for="mulligan-date">Select a date to edit</label>
-                <input id="mulligan-date" type="date"
-                  min="${window.App.state.programStart || ''}"
-                  max="${window.App.getTodayKey()}"
-                  style="${fieldStyle}"
-                  placeholder="Pick a date">
-              </div>
-              <button id="btn-use-mulligan" class="btn-primary" style="width:100%;">
-                📝 Use Mulligan & Edit Day
-              </button>
-            ` : `
-              <div style="text-align:center;padding:var(--space-3);color:var(--color-text-muted);font-size:var(--text-sm);font-weight:600;">
-                🚫 All mulligans used — no more edits allowed.
-              </div>
-            `}
           </div>
         </section>
 
@@ -1571,13 +1549,13 @@
         <p style="font-family:var(--font-body);font-size:var(--text-base);
                   color:var(--color-text-muted);margin-bottom:var(--space-12);
                   max-width:280px;line-height:1.7;">
-          70 days. 6 rules. No excuses.
+          30 days. 7 rules. No excuses.
         </p>
 
         <button id="btn-begin" class="btn-primary"
           style="width:100%;max-width:320px;font-size:var(--text-base);
                  padding:var(--space-4);letter-spacing:0.06em;margin-bottom:var(--space-4);">
-          BEGIN PHASE 1
+          BEGIN CHALLENGE
         </button>
 
         <a id="link-rules" href="#rules"
@@ -1597,8 +1575,6 @@
     root.querySelector('#btn-begin').addEventListener('click', () => {
       const today = window.App.getTodayKey();
       window.App.state.programStart = today;
-      window.App.state.phase1Start  = today;
-      window.App.state.currentPhase = 'phase1';
       window.App.saveState();
       
       renderShell(root);
@@ -1621,7 +1597,7 @@
     const state = window.App.state;
     const today = window.App.getTodayKey();
     const dayNum = window.App.getDayNumber(today);
-    const displayDay = state.programStart ? Math.min(Math.max(dayNum, 1), 70) : '–';
+    const displayDay = state.programStart ? Math.min(Math.max(dayNum, 1), state.programLengthDays || 30) : '–';
 
     const phaseLabel = state.currentPhase === 'phase1'
       ? `<span class="badge badge-phase1">PHASE 1 — CALIBRATION</span>`
@@ -1639,12 +1615,12 @@
           <div style="display:flex;align-items:center;gap:var(--space-2);color:var(--color-primary);" class="icon-flame-hero">
             ${ICONS.flameLg.replace('width="40" height="40"','width="24" height="24"')}
             <span style="font-family:var(--font-display);font-size:var(--text-lg);
-                         letter-spacing:0.06em;color:var(--color-primary);">70 DISCIPLINED</span>
+                         letter-spacing:0.06em;color:var(--color-primary);">MONTHLY DISCIPLINED</span>
           </div>
           <div id="shell-phase-badge">${phaseLabel}</div>
           <div style="font-size:var(--text-xs);color:var(--color-text-faint);
                       font-weight:700;letter-spacing:0.08em;text-align:right;">
-            DAY<br>${displayDay}/70
+            DAY<br>${displayDay}/${state.programLengthDays || 30}
           </div>
         </header>
 
